@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GrapheneOS MDM</string>
+    <string name="device_admin_description">Device Owner agent for fleet management of GrapheneOS devices.</string>
+    <string name="status_device_owner">Device Owner: active</string>
+    <string name="status_not_owner">Device Owner: NOT active — run adb shell dpm set-device-owner …</string>
+    <string name="btn_check_in">Force Check-in</string>
+    <string name="btn_apply_sample_policy">Apply Sample Restrictions</string>
+</resources>
