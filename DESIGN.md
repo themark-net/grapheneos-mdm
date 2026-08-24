@@ -27,17 +27,18 @@ GrapheneOS preserves the AOSP Device Owner framework. Sandboxed Google Play does
 
 ## 3. Enrollment Paths
 
+Operator-facing steps, QR investigation, golden-image notes, and safety: **[docs/ENROLLMENT.md](docs/ENROLLMENT.md)**.
+
 ### Current (supported)
 
-1. Factory reset GrapheneOS
-2. Skip all accounts / setup where possible
-3. Enable developer options + USB debugging
-4. `adb install` + `adb shell dpm set-device-owner ...`
+1. Factory reset GrapheneOS on a Pixel (no accounts).
+2. Skip all accounts / setup where possible; enable developer options + USB debugging.
+3. `adb install` + `adb shell dpm set-device-owner net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver`
 
-### Desired (future)
+### Desired (future — not available on stock GrapheneOS today)
 
-- QR-code provisioning during SetupWizard (GrapheneOS has an open PR for Managed Provisioning support: https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40 and follow-ups). When upstream lands, we can generate QR codes pointing at our agent APK + extras.
-- Platform-signed / system-app preinstall for golden images (more involved).
+- QR-code provisioning during SetupWizard. GrapheneOS SetupWizard2 still lacks a shipped 6-tap / Managed Provisioning path. Upstream work lives in [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40) (open, needs cleanup / current-branch work) and [PR #48](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/48) (closed, not merged). When a release actually lands, this DPC will still need `ACTION_GET_PROVISIONING_MODE` and `ACTION_ADMIN_POLICY_COMPLIANCE` handlers before a custom QR can succeed.
+- Platform-signed / privileged preinstall for golden images (OS rebuild; does not by itself set Device Owner). See [docs/ENROLLMENT.md](docs/ENROLLMENT.md).
 
 ## 4. Agent Components
 
@@ -68,6 +69,7 @@ Later: Ansible modules or a Terraform-like provider that talks to the same API.
 - Wipe / lock commands must be authenticated strongly.
 - GrapheneOS duress PIN remains independent and can still wipe the device.
 - Never store long-lived private keys in plaintext on the device beyond what the Keystore provides.
+- Setting Device Owner is high-impact; see [docs/ENROLLMENT.md](docs/ENROLLMENT.md#safety-notes-read-before-you-set-device-owner).
 
 ## 7. Open Questions / TODOs
 
@@ -76,3 +78,4 @@ Later: Ansible modules or a Terraform-like provider that talks to the same API.
 - Whether to implement a minimal launcher or stay invisible.
 - OTA / OS update enforcement (GrapheneOS has its own updater; we can at least report version and block if too old).
 - Battery / network efficiency of the check-in loop.
+- After SetupWizard2 QR lands: add provisioning-mode / policy-compliance activities for this DPC.
