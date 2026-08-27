@@ -22,6 +22,8 @@ Core policy and silent app install paths are stubbed and ready for expansion.
 
 **Enrollment today**: ADB `dpm set-device-owner` (QR / zero-touch not yet reliable on stock GrapheneOS SetupWizard).
 
+Step-by-step (clean Pixel, ADB, QR investigation, golden-image notes, and safety): **[docs/ENROLLMENT.md](docs/ENROLLMENT.md)**.
+
 See [DESIGN.md](DESIGN.md) for architecture and open design decisions.
 See Issues for tracked work and known limitations.
 
@@ -40,10 +42,12 @@ The debug APK will be at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Enrollment (Device Owner)
 
-On a factory-reset or clean GrapheneOS device with USB debugging enabled and no accounts:
+Full procedure: [docs/ENROLLMENT.md](docs/ENROLLMENT.md).
+
+On a factory-reset or clean GrapheneOS device with USB debugging enabled and **no accounts**:
 
 ```bash
-adb install -r app-debug.apk
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell dpm set-device-owner net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver
 ```
 
@@ -53,25 +57,25 @@ Verify:
 adb shell dumpsys device_policy | grep -A 20 "Device Owner"
 ```
 
-To remove (only if not locked down):
+To remove (debug / `testOnly` APKs only; production Device Owner usually requires factory reset):
 
 ```bash
 adb shell dpm remove-active-admin net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver
 ```
 
-**Important**: Once Device Owner is set, many restrictions become permanent until a factory reset (or the owner app removes itself). Test carefully.
+**Important**: Once Device Owner is set, many restrictions become permanent until a factory reset (or, for debug builds, until the test-only admin is removed). Test carefully. See [docs/ENROLLMENT.md](docs/ENROLLMENT.md#safety-notes-read-before-you-set-device-owner).
 
 ## Architecture Overview
 
 ```
-┌─────────────────┐       mTLS / HTTPS        ┌──────────────────┐
+┌─────────────────┐       mTLS / HTTPS        ┌─────────────────┐
 │  GrapheneOS     │ ◄───────────────────────► │  Your Server     │
 │  Device         │                           │  (Ansible/CA)    │
 │                 │                           │                  │
 │  ┌───────────┐  │                           │  - Policy store  │
 │  │ MDM Agent │  │  (Device Owner)           │  - App catalog   │
 │  │ (this app)│  │                           │  - Inventory DB  │
-│  └─────┬─────┘  │                           └──────────────────┘
+│  └──────┬────┘  │                           └──────────────────┘
 │        │        │
 │  DevicePolicyManager + PackageInstaller
 └─────────────────┘

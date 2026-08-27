@@ -10,9 +10,13 @@ import net.themark.grapheneosmdm.service.MdmService
 /**
  * Device Admin / Device Owner receiver.
  *
+ * Enrollment (ADB today; QR is not available on stock GrapheneOS): docs/ENROLLMENT.md
+ *
  * Once set as Device Owner via:
  *   adb shell dpm set-device-owner net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver
  * this component receives system callbacks and grants the app full DevicePolicyManager powers.
+ *
+ * Manifest: exported=true + BIND_DEVICE_ADMIN (required for the system to bind this receiver).
  */
 class DeviceAdminReceiver : DeviceAdminReceiver() {
 
@@ -30,7 +34,9 @@ class DeviceAdminReceiver : DeviceAdminReceiver() {
     override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
         super.onProfileProvisioningComplete(context, intent)
         Log.i(TAG, "Profile provisioning complete — becoming Device Owner")
-        // In a full QR / managed provisioning flow this is where we finish setup.
+        // QR / managed provisioning is not available on stock GrapheneOS SetupWizard yet.
+        // When it is, this callback is not enough: the DPC also needs GET_PROVISIONING_MODE
+        // and ADMIN_POLICY_COMPLIANCE activities (see docs/ENROLLMENT.md).
         startService(context)
     }
 
