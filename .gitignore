@@ -17,3 +17,14 @@ out/
 app/build/
 *.keystore
 *.jks
+
+# Lab / local TLS material — never commit
+server/lab-certs/
+**/lab-certs/
+*.p12
+*.pem
+!docs/**/*.pem.example
+
+# Gradle wrapper jar is committed; local caches are not
+.gradle/
+**/build/
