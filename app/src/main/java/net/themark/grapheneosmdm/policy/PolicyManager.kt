@@ -97,7 +97,9 @@ class PolicyManager(
                         dpm.reboot(admin)
                     }
                 }
-                "noop", "checkin_now" -> Log.d(TAG, "command ${cmd.type} id=${cmd.id}")
+                "noop" -> Log.d(TAG, "command noop id=${cmd.id}")
+                // Immediate follow-up is enqueued by CheckInRunner after apply.
+                "checkin_now" -> Log.d(TAG, "command checkin_now id=${cmd.id} (scheduler follow-up)")
                 else -> Log.w(TAG, "unknown command ${cmd.type}")
             }
         }
