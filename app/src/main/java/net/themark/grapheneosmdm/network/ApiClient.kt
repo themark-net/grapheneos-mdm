@@ -14,16 +14,15 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.buffer
+import okio.sink
+import java.io.File
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 
 /**
- * Mutual-TLS HTTPS client for inventory check-in (issue #3).
- *
- * Loads client cert + key + CA via [MtlsMaterialLoader], posts
- * [CheckInRequest] to `{baseUrl}/v1/checkin`, stores any short-lived token
- * from the response in [SecureConfigStore].
+ * Mutual-TLS HTTPS client for inventory check-in and private catalog APK download.
  */
 class ApiClient(
     private val context: Context,
@@ -47,7 +46,7 @@ class ApiClient(
     private fun buildClient(): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
 
         val material = materialLoader.load()
@@ -57,7 +56,7 @@ class ApiClient(
             builder.sslSocketFactory(ssl.socketFactory, material.trustManager)
             Log.i(TAG, "OkHttp mTLS configured from ${material.source}")
         } else {
-            Log.w(TAG, "mTLS material missing — HTTPS without client cert (lab enroll incomplete)")
+            Log.w(TAG, "mTLS material missing - HTTPS without client cert (lab enroll incomplete)")
         }
         return builder.build()
     }
@@ -98,6 +97,46 @@ class ApiClient(
         }
     }
 
+    /**
+     * Download an APK from the private catalog (or any absolute HTTPS URL from check-in).
+     * Relative paths like `/v1/catalog/foo.apk` are resolved against [SecureConfigStore.serverBaseUrl].
+     */
+    fun downloadApk(apkUrl: String, dest: File) {
+        val resolved = resolveUrl(apkUrl)
+        val httpReq = Request.Builder()
+            .url(resolved)
+            .get()
+            .header("Accept", "application/vnd.android.package-archive, application/octet-stream, */*")
+            .apply {
+                if (config.hasUsableToken()) {
+                    header("Authorization", "Bearer ${config.shortLivedToken}")
+                }
+            }
+            .build()
+        httpClient().newCall(httpReq).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                throw ApiException("APK download HTTP ${resp.code} for $resolved")
+            }
+            val body = resp.body ?: throw ApiException("APK download empty body")
+            dest.parentFile?.mkdirs()
+            dest.sink().buffer().use { sink ->
+                sink.writeAll(body.source())
+            }
+            Log.i(TAG, "Downloaded APK ${dest.length()} bytes -> ${dest.name}")
+        }
+    }
+
+    private fun resolveUrl(apkUrl: String): String {
+        if (apkUrl.startsWith("https://", ignoreCase = true) ||
+            apkUrl.startsWith("http://", ignoreCase = true)
+        ) {
+            return apkUrl
+        }
+        val base = config.serverBaseUrl
+            ?: error("server base URL not configured for relative catalog URL")
+        return base.trimEnd('/') + "/" + apkUrl.trimStart('/')
+    }
+
     /** Convenience: legacy stub signature used by MdmService. */
     fun checkInLegacyJson(inventory: InventoryReport): String {
         val response = checkIn(inventory)
@@ -122,6 +161,7 @@ class ApiClient(
     companion object {
         private const val TAG = "ApiClient"
         const val CHECKIN_PATH = "/v1/checkin"
+        const val CATALOG_PATH_PREFIX = "/v1/catalog/"
         private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
     }
 }
