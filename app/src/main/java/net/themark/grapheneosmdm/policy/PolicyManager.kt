@@ -2,10 +2,10 @@ package net.themark.grapheneosmdm.policy
 
 import android.app.admin.DevicePolicyManager
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.UserManager
 import android.util.Log
+import net.themark.grapheneosmdm.apps.DesiredAppsEnforcer
 import net.themark.grapheneosmdm.protocol.AttestationInfo
 import net.themark.grapheneosmdm.protocol.DesiredState
 import net.themark.grapheneosmdm.protocol.InventoryReport
@@ -15,10 +15,13 @@ import net.themark.grapheneosmdm.receiver.DeviceAdminReceiver
 import java.time.Instant
 
 /**
- * Collects inventory and applies a subset of [DesiredState] policy flags.
- * Full AppManager catalog install path is issue #4 — not implemented here.
+ * Collects inventory and applies [DesiredState] policy flags + desired-apps
+ * enforcement on every check-in (issue #4 closes packages-logged residual from #3).
  */
-class PolicyManager(private val context: Context) {
+class PolicyManager(
+    private val context: Context,
+    private val desiredAppsEnforcer: DesiredAppsEnforcer = DesiredAppsEnforcer(context),
+) {
 
     private val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
     private val admin = DeviceAdminReceiver.getComponentName(context)
@@ -57,11 +60,13 @@ class PolicyManager(private val context: Context) {
     }
 
     /**
-     * Apply policy flags from desired state. Package install/update is deferred to #4.
+     * Apply policy flags, then persist + enforce the desired-apps list.
      */
     fun applyDesiredState(state: DesiredState) {
         if (!isDeviceOwner()) {
-            Log.w(TAG, "Not device owner — skipping policy apply")
+            Log.w(TAG, "Not device owner - skipping policy apply")
+            // Still persist desired list for when DO is granted.
+            desiredAppsEnforcer.persistAndEnforce(state.requiredPackages)
             return
         }
         val flags: PolicyFlags = state.policyFlags
@@ -72,6 +77,7 @@ class PolicyManager(private val context: Context) {
             dpm.addUserRestriction(admin, UserManager.DISALLOW_FACTORY_RESET)
         }
         if (flags.disallowInstallUnknownSources == true) {
+            // Restricts *user* sideload; Device Owner PackageInstaller still works.
             dpm.addUserRestriction(admin, UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
         }
         if (flags.cameraDisabled == true) {
@@ -95,18 +101,19 @@ class PolicyManager(private val context: Context) {
                 else -> Log.w(TAG, "unknown command ${cmd.type}")
             }
         }
-        if (state.requiredPackages.isNotEmpty()) {
-            Log.i(
-                TAG,
-                "Desired requiredPackages=${state.requiredPackages.size} (install path = issue #4)",
-            )
-        }
+
+        val report = desiredAppsEnforcer.persistAndEnforce(state.requiredPackages)
+        Log.i(
+            TAG,
+            "Desired apps enforced: ok=${report.installedOk.size} " +
+                "failed=${report.failed.size} skipped=${report.skipped.size}",
+        )
         Log.i(TAG, "Desired state policy flags applied")
     }
 
     fun applySampleRestrictions() {
         if (!isDeviceOwner()) {
-            Log.w(TAG, "Not device owner — cannot apply restrictions")
+            Log.w(TAG, "Not device owner - cannot apply restrictions")
             return
         }
         dpm.addUserRestriction(admin, UserManager.DISALLOW_ADD_USER)
