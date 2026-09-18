@@ -23,13 +23,19 @@ Designed to integrate with an existing certificate authority and Ansible-style w
 - **Lab server** - [`server/`](server/) thin mTLS stub for spare-device closed loop.
 - Details: [docs/MTLS.md](docs/MTLS.md).
 
-Parked for later issues: QR wizard (#8), AppManager catalog (#4), WorkManager (#5).
+## Check-in scheduling (issue #5)
+
+- **WorkManager** periodic check-ins with configurable interval + network / battery constraints.
+- Force immediate check-in from the UI or a high-priority `checkin_now` command.
+- Short-lived foreground only while a check-in runs (no sticky 15m loop).
+- Details: [docs/SCHEDULING.md](docs/SCHEDULING.md).
+
+Parked for later issues: QR wizard / commercial packaging (#8).
 
 ## Current Status (2026-09-18)
 
-
-This is an early scaffold. The agent can be built and set as Device Owner via ADB.
-Core policy and silent app install paths are stubbed and ready for expansion.
+Early agent: Device Owner via ADB, mTLS check-in (#3), desired-apps enforce (#4),
+WorkManager scheduling (#5).
 
 **Enrollment today**: ADB `dpm set-device-owner` (QR / zero-touch not yet reliable on stock GrapheneOS SetupWizard).
 
