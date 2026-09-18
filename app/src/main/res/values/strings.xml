@@ -6,4 +6,5 @@
     <string name="status_not_owner">Device Owner: NOT active — run adb shell dpm set-device-owner …</string>
     <string name="btn_check_in">Force Check-in</string>
     <string name="btn_apply_sample_policy">Apply Sample Restrictions</string>
+    <string name="toast_check_in_requested">Check-in requested</string>
 </resources>

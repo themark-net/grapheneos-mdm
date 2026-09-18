@@ -48,11 +48,40 @@ class SecureConfigStore(
         return exp <= 0L || nowEpochMs < exp
     }
 
+    /**
+     * Desired periodic check-in interval in minutes (issue #5).
+     * Clamped to WorkManager periodic bounds by [net.themark.grapheneosmdm.service.CheckInScheduler].
+     */
+    var checkInIntervalMinutes: Long
+        get() = prefs.getLong(KEY_CHECKIN_INTERVAL_MIN, DEFAULT_CHECKIN_INTERVAL_MIN)
+            .let { if (it <= 0L) DEFAULT_CHECKIN_INTERVAL_MIN else it }
+        set(value) {
+            prefs.edit().putLong(KEY_CHECKIN_INTERVAL_MIN, value).apply()
+        }
+
+    /** When true, periodic work requires a connected network. */
+    var requireNetworkConnected: Boolean
+        get() = prefs.getBoolean(KEY_REQUIRE_NETWORK, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_REQUIRE_NETWORK, value).apply()
+        }
+
+    /** When true, periodic work requires battery not low. */
+    var requireBatteryNotLow: Boolean
+        get() = prefs.getBoolean(KEY_REQUIRE_BATTERY_NOT_LOW, true)
+        set(value) {
+            prefs.edit().putBoolean(KEY_REQUIRE_BATTERY_NOT_LOW, value).apply()
+        }
+
     companion object {
         private const val PREFS_NAME = "mdm_secure_config"
         private const val KEY_BASE_URL = "server_base_url"
         private const val KEY_TOKEN = "short_lived_token"
         private const val KEY_TOKEN_EXPIRES = "short_lived_token_expires_ms"
+        private const val KEY_CHECKIN_INTERVAL_MIN = "checkin_interval_minutes"
+        private const val KEY_REQUIRE_NETWORK = "checkin_require_network"
+        private const val KEY_REQUIRE_BATTERY_NOT_LOW = "checkin_require_battery_not_low"
+        const val DEFAULT_CHECKIN_INTERVAL_MIN = 15L
 
         fun create(context: Context): SecureConfigStore {
             val prefs = try {

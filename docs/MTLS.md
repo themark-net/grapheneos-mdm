@@ -51,5 +51,5 @@ parties already trust. Do not commit real CA keys or provisioner passwords here.
 ## Explicitly parked
 
 - QR enrollment wizard / commercial MDM packaging (#8)
-- Full AppManager catalog install from `requiredPackages` (#4)
-- WorkManager check-in scheduling (#5)
+
+Scheduling: [SCHEDULING.md](SCHEDULING.md). Desired-apps / catalog: issue #4 (landed).

@@ -7,8 +7,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import net.themark.grapheneosmdm.R
 import net.themark.grapheneosmdm.policy.PolicyManager
-import net.themark.grapheneosmdm.service.MdmService
-import android.content.Intent
+import net.themark.grapheneosmdm.service.CheckInScheduler
 
 class MainActivity : AppCompatActivity() {
 
@@ -22,12 +21,14 @@ class MainActivity : AppCompatActivity() {
         policyManager = PolicyManager(this)
         statusText = findViewById(R.id.statusText)
 
+        // Ensure periodic WorkManager schedule exists when the operator opens the UI.
+        CheckInScheduler.ensureScheduled(this)
+
         updateStatus()
 
         findViewById<Button>(R.id.btnCheckIn).setOnClickListener {
-            // Trigger the service
-            startForegroundService(Intent(this, MdmService::class.java))
-            Toast.makeText(this, "Check-in requested", Toast.LENGTH_SHORT).show()
+            CheckInScheduler.enqueueImmediate(this, reason = "ui")
+            Toast.makeText(this, R.string.toast_check_in_requested, Toast.LENGTH_SHORT).show()
         }
 
         findViewById<Button>(R.id.btnSamplePolicy).setOnClickListener {

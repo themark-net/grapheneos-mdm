@@ -45,7 +45,8 @@ Operator-facing steps, QR investigation, golden-image notes, and safety: **[docs
 | Component | Responsibility |
 |-----------|----------------|
 | `DeviceAdminReceiver` | Receives system callbacks (enabled, disabled, password changed, etc.) |
-| `MdmService` | Foreground or WorkManager periodic check-in, command execution |
+| `CheckInScheduler` / `CheckInWorker` | WorkManager periodic + expedited check-in (issue #5) |
+| `MdmService` | Optional one-shot foreground escape hatch (no sticky loop) |
 | `PolicyManager` | Translates server policy JSON -> `DevicePolicyManager` / `UserManager` calls |
 | `AppManager` | Download (or receive) APKs, create `PackageInstaller` sessions, commit silently |
 | `ApiClient` | mTLS HTTPS client to server; inventory report + command poll |
@@ -81,5 +82,5 @@ Later: Ansible modules or a Terraform-like provider that talks to the same API.
 - How to handle GrapheneOS multi-user / profiles.
 - Whether to implement a minimal launcher or stay invisible.
 - OTA / OS update enforcement (GrapheneOS has its own updater; we can at least report version and block if too old).
-- Battery / network efficiency of the check-in loop.
+- Battery / network efficiency: addressed by WorkManager constraints (see docs/SCHEDULING.md).
 - After SetupWizard2 QR lands: add provisioning-mode / policy-compliance activities for this DPC.

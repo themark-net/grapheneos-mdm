@@ -84,7 +84,7 @@ adb shell dumpsys device_policy | grep -A 20 "Device Owner"
 
 You should see package `net.themark.grapheneosmdm` and admin `net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver`.
 
-On device, open **GrapheneOS MDM**: the status line should report Device Owner. `DeviceAdminReceiver.onEnabled` starts `MdmService`.
+On device, open **GrapheneOS MDM**: the status line should report Device Owner. `DeviceAdminReceiver.onEnabled` schedules WorkManager check-ins (see [SCHEDULING.md](SCHEDULING.md)).
 
 Optional: disable USB debugging after a successful, verified enrollment if the device will leave a trusted bench.
 
@@ -127,7 +127,7 @@ AOSP QR provisioning (when the wizard actually launches it) typically:
 This repo today:
 
 - Receiver is correctly exported for `DEVICE_ADMIN_ENABLED` / `PROFILE_PROVISIONING_COMPLETE` / `DEVICE_OWNER_CHANGED`.
-- `onProfileProvisioningComplete` only logs and starts `MdmService`.
+- `onProfileProvisioningComplete` schedules WorkManager check-ins (QR path still incomplete on stock GrapheneOS).
 - There are **no** activities for `ACTION_GET_PROVISIONING_MODE` or `ACTION_ADMIN_POLICY_COMPLIANCE`.
 
 So: after GrapheneOS ships a wizard that speaks standard Managed Provisioning, we can generate a QR that points at `net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver` — **but we still need a small DPC provisioning implementation first**. That is follow-up work, not enabled by documentation alone.
