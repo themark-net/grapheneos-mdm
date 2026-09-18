@@ -5,7 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import net.themark.grapheneosmdm.service.MdmService
+import net.themark.grapheneosmdm.service.CheckInScheduler
 
 /**
  * Device Admin / Device Owner receiver.
@@ -23,12 +23,13 @@ class DeviceAdminReceiver : DeviceAdminReceiver() {
     override fun onEnabled(context: Context, intent: Intent) {
         super.onEnabled(context, intent)
         Log.i(TAG, "Device admin enabled")
-        startService(context)
+        scheduleCheckIns(context, reason = "admin_enabled")
     }
 
     override fun onDisabled(context: Context, intent: Intent) {
         super.onDisabled(context, intent)
         Log.w(TAG, "Device admin disabled")
+        CheckInScheduler.cancelAll(context)
     }
 
     override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
@@ -37,12 +38,12 @@ class DeviceAdminReceiver : DeviceAdminReceiver() {
         // QR / managed provisioning is not available on stock GrapheneOS SetupWizard yet.
         // When it is, this callback is not enough: the DPC also needs GET_PROVISIONING_MODE
         // and ADMIN_POLICY_COMPLIANCE activities (see docs/ENROLLMENT.md).
-        startService(context)
+        scheduleCheckIns(context, reason = "provisioning_complete")
     }
 
-    private fun startService(context: Context) {
-        val serviceIntent = Intent(context, MdmService::class.java)
-        context.startForegroundService(serviceIntent)
+    private fun scheduleCheckIns(context: Context, reason: String) {
+        CheckInScheduler.ensureScheduled(context)
+        CheckInScheduler.enqueueImmediate(context, reason = reason)
     }
 
     companion object {
