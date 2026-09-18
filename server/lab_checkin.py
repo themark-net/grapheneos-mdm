@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Thin lab mTLS check-in server for grapheneos-mdm (issue #3 widened DoD).
+"""Thin lab mTLS check-in + private catalog server for grapheneos-mdm.
 
-POST /v1/checkin  — requires client certificate; returns desired-state JSON.
-GET  /healthz     — liveness (no client cert required on this path only if
-                    the reverse proxy strips it; under ssl.CERT_REQUIRED the
-                    whole socket still demands a client cert).
+POST /v1/checkin       - requires client certificate; returns desired-state JSON.
+GET  /v1/catalog/<apk> - serves APK bytes from --catalog-dir (mTLS required).
+GET  /healthz          - liveness.
 
 Usage:
   ./gen-lab-certs.sh
   python3 lab_checkin.py --certs ./lab-certs --port 8443 \\
-      --desired desired-state.example.json
+      --desired desired-state.example.json --catalog-dir ./catalog
 
 Environment:
   MDM_LAB_CERTS   directory with server.pem, server-key.pem, ca.pem
   MDM_DESIRED     path to desired-state JSON file
+  MDM_CATALOG     directory of signed APKs for /v1/catalog/
 """
 
 from __future__ import annotations
@@ -27,10 +27,12 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote
 
 
 SCHEMA_VERSION = 1
 CHECKIN_PATHS = {"/v1/checkin", "/checkin"}
+CATALOG_PREFIX = "/v1/catalog/"
 
 
 def default_desired() -> dict[str, Any]:
@@ -52,9 +54,10 @@ def default_desired() -> dict[str, Any]:
 
 
 class CheckInHandler(BaseHTTPRequestHandler):
-    server_version = "GrapheneOsMdmLab/0.1"
+    server_version = "GrapheneOsMdmLab/0.2"
     desired: dict[str, Any] = default_desired()
     issue_tokens: bool = True
+    catalog_dir: Path | None = None
 
     def log_message(self, fmt: str, *args: Any) -> None:
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
@@ -70,10 +73,41 @@ class CheckInHandler(BaseHTTPRequestHandler):
         return str(cert.get("serialNumber", "peer"))
 
     def do_GET(self) -> None:  # noqa: N802
-        if self.path.split("?", 1)[0] == "/healthz":
+        path = self.path.split("?", 1)[0]
+        if path == "/healthz":
             self._json(200, {"status": "ok"})
             return
+        if path.startswith(CATALOG_PREFIX):
+            self._serve_catalog(path[len(CATALOG_PREFIX) :])
+            return
         self._json(404, {"status": "error", "message": "not found"})
+
+    def _serve_catalog(self, name: str) -> None:
+        # Prevent path traversal; catalog is a flat signed-APK drop.
+        safe = Path(unquote(name)).name
+        if not safe or safe != name.replace("\\", "/").split("/")[-1]:
+            self._json(400, {"status": "error", "message": "invalid catalog name"})
+            return
+        if self.catalog_dir is None or not self.catalog_dir.is_dir():
+            self._json(404, {"status": "error", "message": "catalog not configured"})
+            return
+        target = (self.catalog_dir / safe).resolve()
+        try:
+            target.relative_to(self.catalog_dir.resolve())
+        except ValueError:
+            self._json(400, {"status": "error", "message": "invalid catalog path"})
+            return
+        if not target.is_file():
+            self._json(404, {"status": "error", "message": "apk not found"})
+            return
+        data = target.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/vnd.android.package-archive")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("X-Catalog-Name", safe)
+        self.end_headers()
+        self.wfile.write(data)
+        self.log_message("catalog serve %s (%d bytes) client=%s", safe, len(data), self._client_subject())
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
@@ -146,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8443)
     parser.add_argument("--desired", default=None, help="desired-state JSON path")
+    parser.add_argument("--catalog-dir", default=None, help="directory of APKs for /v1/catalog/")
     parser.add_argument("--no-tokens", action="store_true")
     args = parser.parse_args(argv)
 
@@ -154,15 +189,20 @@ def main(argv: list[str] | None = None) -> int:
         args.desired
         or __import__("os").environ.get("MDM_DESIRED", "desired-state.example.json")
     )
+    catalog = Path(
+        args.catalog_dir
+        or __import__("os").environ.get("MDM_CATALOG", "catalog")
+    )
     if desired_path.is_file():
         CheckInHandler.desired = json.loads(desired_path.read_text(encoding="utf-8"))
     CheckInHandler.issue_tokens = not args.no_tokens
+    CheckInHandler.catalog_dir = catalog if catalog.is_dir() else None
 
     httpd = ThreadingHTTPServer((args.host, args.port), CheckInHandler)
     httpd.socket = build_ssl_context(certs).wrap_socket(httpd.socket, server_side=True)
     print(
         f"lab check-in listening https://{args.host}:{args.port}/v1/checkin "
-        f"(mTLS required, certs={certs})",
+        f"(mTLS required, certs={certs}, catalog={CheckInHandler.catalog_dir})",
         flush=True,
     )
     try:
