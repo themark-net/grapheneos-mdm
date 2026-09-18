@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://themark.net/grapheneos-mdm/protocol/inventory-report.schema.json",
+  "title": "InventoryReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "deviceId", "osVersion", "securityPatch", "installedPackages"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "deviceId": { "type": "string", "minLength": 1 },
+    "osVersion": { "type": "string", "minLength": 1 },
+    "securityPatch": { "type": "string", "minLength": 1 },
+    "isDeviceOwner": { "type": "boolean" },
+    "model": { "type": "string" },
+    "installedPackages": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/packageVersion" }
+    },
+    "attestation": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "format": { "type": "string", "enum": ["none", "keymint", "raw-b64"] },
+        "payloadB64": { "type": "string" },
+        "verifiedBootState": { "type": "string" }
+      },
+      "required": ["format"]
+    },
+    "reportedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "packageVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packageName", "versionName"],
+      "properties": {
+        "packageName": { "type": "string", "minLength": 1 },
+        "versionName": { "type": "string" },
+        "versionCode": { "type": "integer" }
+      }
+    }
+  }
+}
