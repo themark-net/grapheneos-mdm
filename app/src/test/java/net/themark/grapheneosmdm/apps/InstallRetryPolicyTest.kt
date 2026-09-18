@@ -27,10 +27,10 @@ class InstallRetryPolicyTest {
 
     @Test
     fun mapsPackageInstallerCodes() {
-        // android.content.pm.PackageInstaller status constants
+        // android.content.pm.PackageInstaller status constants (AOSP values)
         assertEquals(InstallStatusCode.SUCCESS, InstallStatusMapper.fromPackageInstallerExtra(0))
         assertEquals(InstallStatusCode.FAILURE, InstallStatusMapper.fromPackageInstallerExtra(1))
-        assertEquals(InstallStatusCode.FAILURE_STORAGE, InstallStatusMapper.fromPackageInstallerExtra(-4))
+        assertEquals(InstallStatusCode.FAILURE_STORAGE, InstallStatusMapper.fromPackageInstallerExtra(6))
         assertEquals(InstallStatusCode.PENDING_USER_ACTION, InstallStatusMapper.fromPackageInstallerExtra(-1))
     }
 }
