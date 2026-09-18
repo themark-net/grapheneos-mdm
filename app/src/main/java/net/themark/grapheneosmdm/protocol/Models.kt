@@ -2,7 +2,7 @@ package net.themark.grapheneosmdm.protocol
 
 /**
  * Wire models for issue #3 check-in protocol.
- * Field names match protocol/*.schema.json (Moshi, no renaming).
+ * Field names match protocol/ schema JSON files (Moshi, no renaming).
  */
 
 data class PackageVersion(

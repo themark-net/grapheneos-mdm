@@ -5,7 +5,7 @@ import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
 /**
  * Shared Moshi instance for check-in encode/decode.
- * Keep adapters aligned with protocol/*.schema.json.
+ * Keep adapters aligned with protocol/ schema JSON files.
  */
 object ProtocolJson {
     val moshi: Moshi = Moshi.Builder()
