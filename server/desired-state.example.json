@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "requiredPackages": [
+    {
+      "packageName": "net.themark.grapheneosmdm",
+      "versionName": "0.1.0-alpha"
+    }
+  ],
+  "policyFlags": {
+    "disallowAddUser": true,
+    "disallowFactoryReset": false,
+    "disallowInstallUnknownSources": false,
+    "cameraDisabled": false,
+    "lockTaskPackages": []
+  },
+  "commands": [
+    { "type": "noop", "id": "lab-example" }
+  ]
+}
