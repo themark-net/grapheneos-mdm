@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://themark.net/grapheneos-mdm/protocol/desired-state.schema.json",
+  "title": "DesiredState",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "requiredPackages", "policyFlags"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "requiredPackages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["packageName"],
+        "properties": {
+          "packageName": { "type": "string", "minLength": 1 },
+          "versionName": { "type": "string" },
+          "minVersionCode": { "type": "integer" },
+          "apkUrl": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "policyFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "disallowAddUser": { "type": "boolean" },
+        "disallowFactoryReset": { "type": "boolean" },
+        "disallowInstallUnknownSources": { "type": "boolean" },
+        "cameraDisabled": { "type": "boolean" },
+        "lockTaskPackages": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["noop", "lock", "wipe", "reboot", "checkin_now"]
+          },
+          "id": { "type": "string" }
+        }
+      }
+    }
+  }
+}
