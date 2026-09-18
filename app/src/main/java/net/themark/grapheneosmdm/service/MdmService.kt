@@ -6,15 +6,21 @@ import android.content.Intent
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import net.themark.grapheneosmdm.GrapheneMdmApp
-import net.themark.grapheneosmdm.R
 import net.themark.grapheneosmdm.network.ApiClient
+import net.themark.grapheneosmdm.network.ApiException
 import net.themark.grapheneosmdm.policy.PolicyManager
-import kotlinx.coroutines.*
 
 /**
- * Lightweight foreground service that keeps the agent alive and performs periodic check-ins.
- * Later this can be replaced / supplemented by WorkManager for better battery behaviour.
+ * Lightweight foreground service that performs periodic mTLS check-ins.
+ * WorkManager migration is issue #5 — parked; this loop is enough for lab.
  */
 class MdmService : Service() {
 
@@ -44,23 +50,30 @@ class MdmService : Service() {
         return START_STICKY
     }
 
-    private suspend fun performCheckIn() {
+    private fun performCheckIn() {
         Log.d(TAG, "Performing check-in…")
-        // 1. Collect inventory
-        // 2. POST to server
-        // 3. Receive desired state / commands
-        // 4. Apply via PolicyManager + AppManager
         val inventory = policyManager.collectInventory()
-        val response = apiClient.checkIn(inventory)
-        // TODO: apply response.policies and response.apps
-        Log.d(TAG, "Check-in complete (stub). Server response: $response")
+        try {
+            val response = apiClient.checkIn(inventory)
+            if (response.status == "ok") {
+                policyManager.applyDesiredState(response.desiredState)
+            } else {
+                Log.w(TAG, "Server status=${response.status} msg=${response.message}")
+            }
+            Log.d(TAG, "Check-in complete status=${response.status}")
+        } catch (e: IllegalStateException) {
+            // Base URL not configured yet — expected before lab enroll.
+            Log.i(TAG, "Check-in skipped: ${e.message}")
+        } catch (e: ApiException) {
+            Log.e(TAG, "Check-in API error: ${e.message}")
+        }
     }
 
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, GrapheneMdmApp.CHANNEL_MDM)
             .setContentTitle("GrapheneOS MDM")
             .setContentText("Device management active")
-            .setSmallIcon(android.R.drawable.ic_lock_lock) // replace with proper icon later
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setOngoing(true)
             .build()
     }
@@ -75,6 +88,6 @@ class MdmService : Service() {
     companion object {
         private const val TAG = "MdmService"
         private const val NOTIFICATION_ID = 1001
-        private const val CHECK_IN_INTERVAL_MS = 15 * 60 * 1000L // 15 min for early testing
+        private const val CHECK_IN_INTERVAL_MS = 15 * 60 * 1000L
     }
 }
