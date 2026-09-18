@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://themark.net/grapheneos-mdm/protocol/checkin-request.schema.json",
+  "title": "CheckInRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "inventory"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "inventory": { "$ref": "inventory-report.schema.json" },
+    "agentVersion": { "type": "string" }
+  }
+}

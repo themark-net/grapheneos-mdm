@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://themark.net/grapheneos-mdm/protocol/checkin-response.schema.json",
+  "title": "CheckInResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "desiredState"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "status": { "type": "string", "enum": ["ok", "error"] },
+    "desiredState": { "$ref": "desired-state.schema.json" },
+    "shortLivedToken": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "token": { "type": "string" },
+        "expiresAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["token", "expiresAt"]
+    },
+    "message": { "type": "string" }
+  }
+}

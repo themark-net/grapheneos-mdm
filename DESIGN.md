@@ -1,4 +1,4 @@
-# Design Document — GrapheneOS MDM
+# Design Document - GrapheneOS MDM
 
 ## 1. Why a custom agent?
 
@@ -6,7 +6,7 @@ Existing options:
 
 - **GemiGuard / ShieldMDM**: Commercial, GrapheneOS-aware, Device Owner based. Good but closed and paid.
 - **Headwind MDM**: Open-source core, works as Device Owner, but community edition has feature limits and the agent is a full launcher. We want a lighter, Ansible-native feel.
-- **myMDM / AFM / Android Management API**: Depend on Google services → incompatible with GrapheneOS.
+- **myMDM / AFM / Android Management API**: Depend on Google services -> incompatible with GrapheneOS.
 
 We need full control, mutual TLS with our existing CA, and the ability to treat phones more like managed Linux hosts.
 
@@ -35,7 +35,7 @@ Operator-facing steps, QR investigation, golden-image notes, and safety: **[docs
 2. Skip all accounts / setup where possible; enable developer options + USB debugging.
 3. `adb install` + `adb shell dpm set-device-owner net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver`
 
-### Desired (future — not available on stock GrapheneOS today)
+### Desired (future - not available on stock GrapheneOS today)
 
 - QR-code provisioning during SetupWizard. GrapheneOS SetupWizard2 still lacks a shipped 6-tap / Managed Provisioning path. Upstream work lives in [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40) (open, needs cleanup / current-branch work) and [PR #48](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/48) (closed, not merged). When a release actually lands, this DPC will still need `ACTION_GET_PROVISIONING_MODE` and `ACTION_ADMIN_POLICY_COMPLIANCE` handlers before a custom QR can succeed.
 - Platform-signed / privileged preinstall for golden images (OS rebuild; does not by itself set Device Owner). See [docs/ENROLLMENT.md](docs/ENROLLMENT.md).
@@ -46,16 +46,20 @@ Operator-facing steps, QR investigation, golden-image notes, and safety: **[docs
 |-----------|----------------|
 | `DeviceAdminReceiver` | Receives system callbacks (enabled, disabled, password changed, etc.) |
 | `MdmService` | Foreground or WorkManager periodic check-in, command execution |
-| `PolicyManager` | Translates server policy JSON → `DevicePolicyManager` / `UserManager` calls |
+| `PolicyManager` | Translates server policy JSON -> `DevicePolicyManager` / `UserManager` calls |
 | `AppManager` | Download (or receive) APKs, create `PackageInstaller` sessions, commit silently |
 | `ApiClient` | mTLS HTTPS client to server; inventory report + command poll |
-| `MainActivity` | Status UI, manual trigger, “is Device Owner?” indicator |
+| `MainActivity` | Status UI, manual trigger, "is Device Owner?" indicator |
 
-## 5. Server Side (out of scope for this repo initially)
+## 5. Server Side
 
-A simple FastAPI / Go service that:
+**Lab (in-repo):** [`server/lab_checkin.py`](server/lab_checkin.py) - thin mTLS
+`POST /v1/checkin` stub that returns desired-state JSON for spare-device loops.
+See [docs/MTLS.md](docs/MTLS.md).
 
-- Authenticates devices via client certificates issued by the existing CA
+**Production (still external):** a FastAPI / Go control plane that:
+
+- Authenticates devices via client certificates issued by the existing CA / step-ca
 - Stores desired state (apps + versions + policies) per device or group
 - Serves signed APKs or redirects to a private F-Droid / Accrescent-style repo
 - Accepts inventory reports

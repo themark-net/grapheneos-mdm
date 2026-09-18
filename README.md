@@ -15,7 +15,18 @@ Designed to integrate with an existing certificate authority and Ansible-style w
 - Secure communication using mutual TLS (your CA)
 - Work fully offline / air-gapped capable (local server)
 
-## Current Status (2026-08-19)
+## Check-in protocol (issue #3)
+
+- **mTLS `ApiClient`** - loads client cert + CA from Android Keystore or app-private `mtls/`, posts inventory to `/v1/checkin`.
+- **JSON schemas** - [`protocol/`](protocol/) inventory report + desired state.
+- **Secure config** - EncryptedSharedPreferences for server base URL and short-lived tokens.
+- **Lab server** - [`server/`](server/) thin mTLS stub for spare-device closed loop.
+- Details: [docs/MTLS.md](docs/MTLS.md).
+
+Parked for later issues: QR wizard (#8), AppManager catalog (#4), WorkManager (#5).
+
+## Current Status (2026-09-18)
+
 
 This is an early scaffold. The agent can be built and set as Device Owner via ADB.
 Core policy and silent app install paths are stubbed and ready for expansion.
@@ -68,17 +79,17 @@ adb shell dpm remove-active-admin net.themark.grapheneosmdm/.receiver.DeviceAdmi
 ## Architecture Overview
 
 ```
-┌─────────────────┐       mTLS / HTTPS        ┌─────────────────┐
-│  GrapheneOS     │ ◄───────────────────────► │  Your Server     │
-│  Device         │                           │  (Ansible/CA)    │
-│                 │                           │                  │
-│  ┌───────────┐  │                           │  - Policy store  │
-│  │ MDM Agent │  │  (Device Owner)           │  - App catalog   │
-│  │ (this app)│  │                           │  - Inventory DB  │
-│  └──────┬────┘  │                           └──────────────────┘
-│        │        │
-│  DevicePolicyManager + PackageInstaller
-└─────────────────┘
+/-----------------\       mTLS / HTTPS        /-----------------\
+|  GrapheneOS     | <-----------------------> |  Your Server     |
+|  Device         |                           |  (Ansible/CA)    |
+|                 |                           |                  |
+|  /-----------\  |                           |  - Policy store  |
+|  | MDM Agent |  |  (Device Owner)           |  - App catalog   |
+|  | (this app)|  |                           |  - Inventory DB  |
+|  \------+----/  |                           \------------------/
+|        |        |
+|  DevicePolicyManager + PackageInstaller
+\-----------------/
 ```
 
 The agent runs as Device Owner, periodically checks in (or receives commands), applies policies, and installs/updates apps from a private catalog (APKs signed by you or F-Droid style).
