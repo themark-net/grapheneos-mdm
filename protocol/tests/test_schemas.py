@@ -27,7 +27,6 @@ class SchemaSmokeTest(unittest.TestCase):
             self.assertIn("properties", schema)
 
     def test_inventory_example_shape(self) -> None:
-        # Structural check without jsonschema dep (kept light for CI).
         inv = {
             "schemaVersion": 1,
             "deviceId": "abc",
@@ -49,6 +48,12 @@ class SchemaSmokeTest(unittest.TestCase):
         schema = _load("desired-state.schema.json")
         for key in schema["required"]:
             self.assertIn(key, desired)
+        pkg = desired["requiredPackages"][0]
+        self.assertIn("apkUrl", pkg)
+        self.assertRegex(pkg["sha256"], r"^[A-Fa-f0-9]{64}$")
+        item_props = schema["properties"]["requiredPackages"]["items"]["properties"]
+        self.assertIn("sha256", item_props)
+        self.assertIn("signingCertSha256", item_props)
 
 
 if __name__ == "__main__":

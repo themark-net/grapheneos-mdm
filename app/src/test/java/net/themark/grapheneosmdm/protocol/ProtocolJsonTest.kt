@@ -32,7 +32,12 @@ class ProtocolJsonTest {
               "desiredState": {
                 "schemaVersion": 1,
                 "requiredPackages": [
-                  {"packageName": "net.themark.grapheneosmdm", "versionName": "0.1.0-alpha"}
+                  {
+                    "packageName": "net.themark.grapheneosmdm",
+                    "versionName": "0.1.0-alpha",
+                    "apkUrl": "/v1/catalog/grapheneosmdm.apk",
+                    "sha256": "c4b21224817aab1213dcdb25a690682422dcacf438bbab13fba7897aa3bdcc4b"
+                  }
                 ],
                 "policyFlags": {"disallowAddUser": true},
                 "commands": [{"type": "noop", "id": "t1"}]
@@ -47,6 +52,8 @@ class ProtocolJsonTest {
         assertEquals("ok", response.status)
         assertEquals(1, response.desiredState.requiredPackages.size)
         assertEquals("net.themark.grapheneosmdm", response.desiredState.requiredPackages[0].packageName)
+        assertEquals("/v1/catalog/grapheneosmdm.apk", response.desiredState.requiredPackages[0].apkUrl)
+        assertEquals(64, response.desiredState.requiredPackages[0].sha256!!.length)
         assertNotNull(response.shortLivedToken)
         assertEquals("abc", response.shortLivedToken!!.token)
     }

@@ -3,17 +3,23 @@
   "requiredPackages": [
     {
       "packageName": "net.themark.grapheneosmdm",
-      "versionName": "0.1.0-alpha"
+      "versionName": "0.1.0-alpha",
+      "minVersionCode": 1,
+      "apkUrl": "/v1/catalog/grapheneosmdm.apk",
+      "sha256": "c4b21224817aab1213dcdb25a690682422dcacf438bbab13fba7897aa3bdcc4b"
     }
   ],
   "policyFlags": {
     "disallowAddUser": true,
     "disallowFactoryReset": false,
-    "disallowInstallUnknownSources": false,
+    "disallowInstallUnknownSources": true,
     "cameraDisabled": false,
     "lockTaskPackages": []
   },
   "commands": [
-    { "type": "noop", "id": "lab-example" }
+    {
+      "type": "noop",
+      "id": "lab-example"
+    }
   ]
 }

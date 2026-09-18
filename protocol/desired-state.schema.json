@@ -17,7 +17,17 @@
           "packageName": { "type": "string", "minLength": 1 },
           "versionName": { "type": "string" },
           "minVersionCode": { "type": "integer" },
-          "apkUrl": { "type": "string", "format": "uri" }
+          "apkUrl": { "type": "string", "format": "uri" },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$",
+            "description": "Hex SHA-256 of the APK bytes; required before install when apkUrl is set."
+          },
+          "signingCertSha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$",
+            "description": "Hex SHA-256 of the APK signing certificate (DER)."
+          }
         }
       }
     },
