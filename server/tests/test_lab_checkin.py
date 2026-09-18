@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
-"""Integration test: gen certs → mTLS check-in → desired-state."""
+"""Integration test: gen certs -> mTLS check-in + catalog -> desired-state."""
 
 from __future__ import annotations
 
 import json
-import os
 import ssl
 import subprocess
 import tempfile
 import threading
 import time
 import unittest
-import urllib.error
-import urllib.request
 from http.client import HTTPSConnection
 from pathlib import Path
 
@@ -28,7 +25,6 @@ class LabCheckInTest(unittest.TestCase):
             ["bash", str(SERVER_DIR / "gen-lab-certs.sh"), str(cls.certs)],
             cwd=str(SERVER_DIR),
         )
-        # Import server module
         import importlib.util
 
         spec = importlib.util.spec_from_file_location(
@@ -42,6 +38,7 @@ class LabCheckInTest(unittest.TestCase):
         desired = json.loads((SERVER_DIR / "desired-state.example.json").read_text())
         mod.CheckInHandler.desired = desired
         mod.CheckInHandler.issue_tokens = True
+        mod.CheckInHandler.catalog_dir = SERVER_DIR / "catalog"
 
         cls.httpd = mod.ThreadingHTTPServer(("127.0.0.1", 0), mod.CheckInHandler)
         ctx = mod.build_ssl_context(cls.certs)
@@ -88,12 +85,32 @@ class LabCheckInTest(unittest.TestCase):
         self.assertEqual(parsed["status"], "ok")
         self.assertEqual(parsed["desiredState"]["schemaVersion"], 1)
         self.assertIn("requiredPackages", parsed["desiredState"])
+        pkgs = parsed["desiredState"]["requiredPackages"]
+        self.assertTrue(pkgs)
+        self.assertIn("apkUrl", pkgs[0])
+        self.assertIn("sha256", pkgs[0])
         self.assertIn("shortLivedToken", parsed)
+        conn.close()
+
+    def test_catalog_download_mtls(self) -> None:
+        conn = HTTPSConnection("127.0.0.1", self.port, context=self._ssl_ctx())
+        conn.request("GET", "/v1/catalog/grapheneosmdm.apk")
+        resp = conn.getresponse()
+        raw = resp.read()
+        self.assertEqual(resp.status, 200, raw[:200])
+        self.assertEqual(raw, b"lab-placeholder-apk\n")
+        conn.close()
+
+    def test_catalog_rejects_traversal(self) -> None:
+        conn = HTTPSConnection("127.0.0.1", self.port, context=self._ssl_ctx())
+        conn.request("GET", "/v1/catalog/../lab_checkin.py")
+        resp = conn.getresponse()
+        raw = resp.read()
+        self.assertIn(resp.status, (400, 404), raw[:200])
         conn.close()
 
     def test_rejects_without_client_cert(self) -> None:
         ctx = ssl.create_default_context(cafile=str(self.certs / "ca.pem"))
-        # no client cert
         conn = HTTPSConnection("127.0.0.1", self.port, context=ctx)
         with self.assertRaises(Exception):
             conn.request("POST", "/v1/checkin", body=b"{}", headers={"Content-Type": "application/json"})
