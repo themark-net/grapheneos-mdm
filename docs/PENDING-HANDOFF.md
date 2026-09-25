@@ -1,8 +1,20 @@
 # Pending handoff
 
-Continuation note for the next harness. Issue **#24** is merged. The open client work is issue **#26** on `feat/issue-26-client-gaps`: key attestation, persistent preferred activities, user serials, an OS-updater check, and the QR provisioning activities. Issue **#8** stays open because stock GrapheneOS still has no 6-tap wizard.
+Continuation note for the next harness. Issue **#26** is merged. Issue **#8** stays open because stock GrapheneOS still has no 6-tap wizard. There is no open client feature work on this tip beyond that park.
 
-Written 2026-09-25. Issues #12, #13, #14, #18, #21, and #24 are closed.
+Written 2026-09-25. Issues #12, #13, #14, #18, #21, #24, and #26 are closed.
+
+## Shipped: issue #26 — PR #27
+
+Squash `cb09cfb9fdb8604772bbae19abd836a5c569a04c` (was head `2212c55`).
+
+Does not close #8. The provisioning activities are in place; stock GrapheneOS SetupWizard still has no 6-tap scanner.
+
+- **Attestation.** Lab check-in may return `attestationChallenge` (32 random bytes, base64). The next inventory uses an Android Keystore key bound to that nonce: `attestation.format=keymint`, `payloadB64` is the concatenated DER chain (leaf first), and `verifiedBootState` is `Verified`, `SelfSigned`, `Unverified`, or `Failed` when the attestation extension contains root-of-trust. No challenge keeps `format=none`.
+- **Preferred activities.** `persistentPreferredActivities` is the full set this agent manages. Omit leaves them alone. Empty clears only packages this agent previously set.
+- **Profiles.** Inventory `users` lists the calling user serial and `getSecondaryUsers` serials. `disallowUserSwitch` uses the same true/false/omit rule as the other restrictions. This does not create or delete users. Silent install stays on the system user.
+- **Updater.** Inventory `osUpdater` reports `app.seamlessupdate.client`. Command `check_os_update` unhides that package and starts `android.settings.SYSTEM_UPDATE_SETTINGS`. The updater service is not exported, and its settings activity requires a signature permission, so this agent does not download the OTA itself.
+- **QR handlers.** `GET_PROVISIONING_MODE` returns fully-managed when that mode is allowed, and cancels when the wizard offers only a work profile. `ADMIN_POLICY_COMPLIANCE` returns OK.
 
 ## Shipped: issue #24 — PR #25
 
@@ -29,12 +41,12 @@ Omit `passwordComplexity`, `maximumTimeToLockMs`, `suspendedPackages`, or `hidde
 | | |
 | --- | --- |
 | Branch | `main` |
-| SHA | `fba9f9f` |
-| Subject | Report a GPS fix for lost-device recovery (#25) |
+| SHA | `cb09cfb` |
+| Subject | Attestation, preferred activities, profiles, updater check, QR handlers (#27) |
 
 ## 2. What shipped
 
-Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24.
+Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24/#26.
 
 ### PR #17 — clear user restrictions — Fixes #14
 
@@ -61,6 +73,10 @@ Squash `b0b79aeb1cabc1a41ebb53bcc41709a088688f03`.
 ### PR #25 — lost-device GPS — Fixes #24
 
 Squash `fba9f9f87089e0ede86b48390cb97910cf6c55d2`.
+
+### PR #27 — attestation / preferred activities / profiles / updater / QR — Fixes #26
+
+Squash `cb09cfb9fdb8604772bbae19abd836a5c569a04c`.
 
 Earlier commits still on this tip, outside this stack: WorkManager scheduling (#11, issue #5), desired-apps enforce (#10, issue #4), mTLS check-in (#9, issue #3), and the enrollment guide (#7).
 
