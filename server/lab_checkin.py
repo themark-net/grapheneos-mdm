@@ -5,6 +5,9 @@ POST /v1/checkin       - requires client certificate; returns desired-state JSON
 GET  /v1/catalog/<apk> - serves APK bytes from --catalog-dir (mTLS required).
 GET  /healthz          - liveness.
 
+Optional --db sqlite records each device's last inventory and serves a
+per-device desired-state override when one has been set (see fleet_store.py).
+
 Usage:
   ./gen-lab-certs.sh
   python3 lab_checkin.py --certs ./lab-certs --port 8443 \\
@@ -28,6 +31,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
+
+_SERVER_DIR = Path(__file__).resolve().parent
+if str(_SERVER_DIR) not in sys.path:
+    sys.path.insert(0, str(_SERVER_DIR))
+
+from fleet_store import FleetStore  # noqa: E402
 
 
 SCHEMA_VERSION = 1
@@ -54,10 +63,11 @@ def default_desired() -> dict[str, Any]:
 
 
 class CheckInHandler(BaseHTTPRequestHandler):
-    server_version = "GrapheneOsMdmLab/0.2"
+    server_version = "GrapheneOsMdmLab/0.3"
     desired: dict[str, Any] = default_desired()
     issue_tokens: bool = True
     catalog_dir: Path | None = None
+    fleet: FleetStore | None = None
 
     def log_message(self, fmt: str, *args: Any) -> None:
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
@@ -123,8 +133,14 @@ class CheckInHandler(BaseHTTPRequestHandler):
             return
 
         inventory = body.get("inventory") or {}
-        device_id = inventory.get("deviceId", "unknown")
+        if not isinstance(inventory, dict):
+            inventory = {}
+        device_id = inventory.get("deviceId") or "unknown"
         subject = self._client_subject()
+        desired = self.desired
+        if self.fleet is not None:
+            self.fleet.record_checkin(device_id, subject, inventory)
+            desired = self.fleet.desired_for(device_id, self.desired)
         self.log_message(
             "check-in deviceId=%s packages=%s client=%s",
             device_id,
@@ -135,7 +151,7 @@ class CheckInHandler(BaseHTTPRequestHandler):
         response: dict[str, Any] = {
             "schemaVersion": SCHEMA_VERSION,
             "status": "ok",
-            "desiredState": self.desired,
+            "desiredState": desired,
             "message": f"lab check-in accepted for {device_id}",
         }
         if self.issue_tokens:
@@ -181,6 +197,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=8443)
     parser.add_argument("--desired", default=None, help="desired-state JSON path")
     parser.add_argument("--catalog-dir", default=None, help="directory of APKs for /v1/catalog/")
+    parser.add_argument(
+        "--db",
+        default=None,
+        help="sqlite path; record inventory and apply per-device desired-state overrides",
+    )
     parser.add_argument("--no-tokens", action="store_true")
     args = parser.parse_args(argv)
 
@@ -197,12 +218,15 @@ def main(argv: list[str] | None = None) -> int:
         CheckInHandler.desired = json.loads(desired_path.read_text(encoding="utf-8"))
     CheckInHandler.issue_tokens = not args.no_tokens
     CheckInHandler.catalog_dir = catalog if catalog.is_dir() else None
+    db_path = args.db or __import__("os").environ.get("MDM_DB")
+    CheckInHandler.fleet = FleetStore(db_path) if db_path else None
 
     httpd = ThreadingHTTPServer((args.host, args.port), CheckInHandler)
     httpd.socket = build_ssl_context(certs).wrap_socket(httpd.socket, server_side=True)
     print(
         f"lab check-in listening https://{args.host}:{args.port}/v1/checkin "
-        f"(mTLS required, certs={certs}, catalog={CheckInHandler.catalog_dir})",
+        f"(mTLS required, certs={certs}, catalog={CheckInHandler.catalog_dir}, "
+        f"db={CheckInHandler.fleet.path if CheckInHandler.fleet else None})",
         flush=True,
     )
     try:

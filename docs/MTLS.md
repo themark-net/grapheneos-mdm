@@ -30,7 +30,8 @@ See [`protocol/`](../protocol/). `POST {baseUrl}/v1/checkin` with
 ## Lab closed loop
 
 [`server/`](../server/) is a thin Python stub that demands `ssl.CERT_REQUIRED`
-and returns `desired-state.example.json`. Generate throwaway certs with
+and returns `desired-state.example.json`. Pass `--db` to record inventory and
+apply a per-device desired-state override. Generate throwaway certs with
 `server/gen-lab-certs.sh`, or point both sides at PEMs from step-ca.
 
 ## Fleet CA / step-ca / Ansible alignment

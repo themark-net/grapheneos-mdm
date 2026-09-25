@@ -39,6 +39,8 @@ class LabCheckInTest(unittest.TestCase):
         mod.CheckInHandler.desired = desired
         mod.CheckInHandler.issue_tokens = True
         mod.CheckInHandler.catalog_dir = SERVER_DIR / "catalog"
+        cls.store = mod.FleetStore(Path(cls.tmp.name) / "fleet.sqlite")
+        mod.CheckInHandler.fleet = cls.store
 
         cls.httpd = mod.ThreadingHTTPServer(("127.0.0.1", 0), mod.CheckInHandler)
         ctx = mod.build_ssl_context(cls.certs)
@@ -50,6 +52,8 @@ class LabCheckInTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
+        cls.mod.CheckInHandler.fleet = None
+        cls.store.close()
         cls.httpd.shutdown()
         cls.tmp.cleanup()
 
@@ -108,6 +112,44 @@ class LabCheckInTest(unittest.TestCase):
         raw = resp.read()
         self.assertIn(resp.status, (400, 404), raw[:200])
         conn.close()
+
+    def _checkin(self, device_id: str) -> dict:
+        body = {
+            "schemaVersion": 1,
+            "inventory": {
+                "schemaVersion": 1,
+                "deviceId": device_id,
+                "osVersion": "16",
+                "securityPatch": "2026-09-01",
+                "installedPackages": [],
+            },
+        }
+        data = json.dumps(body).encode()
+        conn = HTTPSConnection("127.0.0.1", self.port, context=self._ssl_ctx())
+        conn.request("POST", "/v1/checkin", body=data, headers={"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        raw = resp.read().decode()
+        self.assertEqual(resp.status, 200, raw)
+        conn.close()
+        return json.loads(raw)
+
+    def test_per_device_desired_override(self) -> None:
+        override = {
+            "schemaVersion": 1,
+            "requiredPackages": [{"packageName": "net.example.only-this-device"}],
+            "policyFlags": {},
+        }
+        self.store.set_desired("device-override", override)
+        default_resp = self._checkin("device-default")
+        override_resp = self._checkin("device-override")
+        default_pkgs = default_resp["desiredState"]["requiredPackages"]
+        override_pkgs = override_resp["desiredState"]["requiredPackages"]
+        self.assertEqual(default_pkgs[0]["packageName"], "net.themark.grapheneosmdm")
+        self.assertEqual(override_pkgs[0]["packageName"], "net.example.only-this-device")
+        stored = {row["deviceId"]: row for row in self.store.list_devices()}
+        self.assertIn("device-default", stored)
+        self.assertFalse(stored["device-default"]["hasOverride"])
+        self.assertTrue(stored["device-override"]["hasOverride"])
 
     def test_rejects_without_client_cert(self) -> None:
         ctx = ssl.create_default_context(cafile=str(self.certs / "ca.pem"))
