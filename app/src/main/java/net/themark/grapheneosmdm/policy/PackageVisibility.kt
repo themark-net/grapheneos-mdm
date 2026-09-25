@@ -28,3 +28,10 @@ internal fun packageSetChange(
         next = next,
     )
 }
+
+/**
+ * Stored set after an apply. Failed turn-offs stay so the next check-in retries them.
+ * Packages that turned off successfully are absent from [next] and are not kept.
+ */
+internal fun persistedPackageSet(next: Set<String>, failedTurnOff: Collection<String>): Set<String> =
+    next + failedTurnOff

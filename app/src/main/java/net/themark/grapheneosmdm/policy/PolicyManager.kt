@@ -161,7 +161,8 @@ class PolicyManager(
     private fun applyLockScreen(flags: PolicyFlags) {
         val complexity = passwordComplexityConstant(flags.passwordComplexity)
         if (complexity != null) {
-            dpm.setRequiredPasswordComplexity(admin, complexity)
+            // API 31+: setRequiredPasswordComplexity(int). No admin ComponentName.
+            dpm.setRequiredPasswordComplexity(complexity)
         } else if (!flags.passwordComplexity.isNullOrBlank()) {
             Log.w(TAG, "unknown passwordComplexity ${flags.passwordComplexity}")
         }
@@ -176,24 +177,30 @@ class PolicyManager(
             val failed = dpm.setPackagesSuspended(admin, arrayOf(name), on)
             if (failed.isNotEmpty()) {
                 Log.w(TAG, "setPackagesSuspended failed name=$name suspended=$on")
+                false
+            } else {
+                true
             }
         }
         applyPackageSet(flags.hiddenPackages, KEY_HIDDEN) { name, on ->
-            if (!dpm.setApplicationHidden(admin, name, on)) {
+            val ok = dpm.setApplicationHidden(admin, name, on)
+            if (!ok) {
                 Log.w(TAG, "setApplicationHidden failed name=$name hidden=$on")
             }
+            ok
         }
     }
 
     private fun applyPackageSet(
         desired: List<String>?,
         key: String,
-        applyOne: (String, Boolean) -> Unit,
+        applyOne: (String, Boolean) -> Boolean,
     ) {
         val change = packageSetChange(storedNameSet(key), desired, context.packageName) ?: return
-        for (name in change.turnOff) applyOne(name, false)
+        val failedTurnOff = change.turnOff.filterNot { name -> applyOne(name, false) }
         for (name in change.assertOn) applyOne(name, true)
-        compliancePrefs.edit().putStringSet(key, HashSet(change.next)).apply()
+        val persisted = persistedPackageSet(change.next, failedTurnOff)
+        compliancePrefs.edit().putStringSet(key, HashSet(persisted)).apply()
     }
 
     private fun storedNameSet(key: String): Set<String> {

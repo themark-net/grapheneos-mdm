@@ -34,4 +34,16 @@ class PackageVisibilityTest {
         assertEquals(listOf("com.old"), change.turnOff)
         assertEquals(emptySet<String>(), change.next)
     }
+
+    @Test
+    fun failedTurnOffStaysPersistedForRetry() {
+        assertEquals(
+            setOf("com.stay", "com.stuck"),
+            persistedPackageSet(setOf("com.stay"), listOf("com.stuck")),
+        )
+        assertEquals(
+            setOf("com.stay"),
+            persistedPackageSet(setOf("com.stay"), emptyList()),
+        )
+    }
 }
