@@ -35,7 +35,7 @@ Parked for later issues: QR wizard / commercial packaging (#8).
 ## Current Status (2026-09-18)
 
 Early agent: Device Owner via ADB, mTLS check-in (#3), desired-apps enforce (#4),
-WorkManager scheduling (#5).
+WorkManager scheduling (#5). Stack through clear-restrictions, fleet store, and the security-patch floor is recorded in [docs/PENDING-HANDOFF.md](docs/PENDING-HANDOFF.md).
 
 **Enrollment today**: ADB `dpm set-device-owner` (QR / zero-touch not yet reliable on stock GrapheneOS SetupWizard).
 
