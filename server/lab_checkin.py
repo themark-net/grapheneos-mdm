@@ -22,7 +22,9 @@ Environment:
 from __future__ import annotations
 
 import argparse
+import base64
 import json
+import os
 import ssl
 import sys
 import uuid
@@ -153,6 +155,7 @@ class CheckInHandler(BaseHTTPRequestHandler):
             "status": "ok",
             "desiredState": desired,
             "message": f"lab check-in accepted for {device_id}",
+            "attestationChallenge": base64.b64encode(os.urandom(32)).decode("ascii"),
         }
         if self.issue_tokens:
             exp = datetime.now(timezone.utc) + timedelta(hours=1)

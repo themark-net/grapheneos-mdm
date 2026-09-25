@@ -35,6 +35,7 @@ class CheckInRunner(
         return try {
             val response = apiClient.checkIn(inventory)
             if (response.status == "ok") {
+                policyManager.noteAttestationChallenge(response.attestationChallenge)
                 applyDesiredState(response.desiredState, allowFollowUpCheckIn)
             } else {
                 Log.w(TAG, "Server status=${response.status} msg=${response.message}")

@@ -23,6 +23,32 @@ data class DeviceLocation(
     val time: String? = null,
 )
 
+/** One Android user this agent can see. [serial] is the stable user serial. */
+data class DeviceUser(
+    val serial: Long,
+    val secondary: Boolean = false,
+)
+
+/** GrapheneOS System Updater (`app.seamlessupdate.client`) as installed on the device. */
+data class OsUpdaterStatus(
+    val packageName: String = "app.seamlessupdate.client",
+    val installed: Boolean,
+    val enabled: Boolean? = null,
+    val versionName: String? = null,
+)
+
+/**
+ * One persistent preferred activity. [activity] is the class name inside [packageName].
+ */
+data class PersistentPreferredActivity(
+    val packageName: String,
+    val activity: String,
+    val action: String,
+    val categories: List<String>? = null,
+    val schemes: List<String>? = null,
+    val mimeType: String? = null,
+)
+
 data class AttestationInfo(
     val format: String = "none",
     val payloadB64: String? = null,
@@ -39,6 +65,8 @@ data class InventoryReport(
     val isDeviceOwner: Boolean? = null,
     val model: String? = null,
     val location: DeviceLocation? = null,
+    val users: List<DeviceUser>? = null,
+    val osUpdater: OsUpdaterStatus? = null,
     val attestation: AttestationInfo? = null,
     val reportedAt: String? = null,
 )
@@ -82,6 +110,8 @@ data class PolicyFlags(
     val usbDataSignalingEnabled: Boolean? = null,
     val disallowConfigWifi: Boolean? = null,
     val disallowConfigMobileNetworks: Boolean? = null,
+    val disallowUserSwitch: Boolean? = null,
+    val persistentPreferredActivities: List<PersistentPreferredActivity>? = null,
     val lockTaskPackages: List<String>? = null,
 )
 
@@ -113,5 +143,6 @@ data class CheckInResponse(
     val status: String,
     val desiredState: DesiredState,
     val shortLivedToken: ShortLivedToken? = null,
+    val attestationChallenge: String? = null,
     val message: String? = null,
 )

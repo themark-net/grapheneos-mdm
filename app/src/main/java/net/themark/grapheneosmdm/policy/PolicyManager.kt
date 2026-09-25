@@ -34,6 +34,7 @@ internal fun userRestrictionUpdates(flags: PolicyFlags): List<Pair<String, Boole
         flags.disallowInstallUnknownSources?.let { UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES to it },
         flags.disallowConfigWifi?.let { UserManager.DISALLOW_CONFIG_WIFI to it },
         flags.disallowConfigMobileNetworks?.let { UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS to it },
+        flags.disallowUserSwitch?.let { UserManager.DISALLOW_USER_SWITCH to it },
     )
 }
 
@@ -49,6 +50,7 @@ class PolicyManager(
     private val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
     private val admin = DeviceAdminReceiver.getComponentName(context)
     private val compliancePrefs = context.getSharedPreferences(COMPLIANCE_PREFS, Context.MODE_PRIVATE)
+    private val keyAttestor = KeyAttestor()
 
     fun isDeviceOwner(): Boolean = dpm.isDeviceOwnerApp(context.packageName)
 
@@ -80,7 +82,9 @@ class PolicyManager(
             isDeviceOwner = isDeviceOwner(),
             model = Build.MODEL,
             location = readRecoveryLocation(),
-            attestation = AttestationInfo(format = "none"),
+            users = collectDeviceUsers(),
+            osUpdater = OsUpdater.describe(context),
+            attestation = collectAttestation(),
             reportedAt = Instant.now().toString(),
         )
     }
@@ -120,6 +124,7 @@ class PolicyManager(
         flags.lockTaskPackages?.let { pkgs ->
             dpm.setLockTaskPackages(admin, pkgs.toTypedArray())
         }
+        applyPreferredActivities(flags)
         state.commands.orEmpty().forEach { cmd ->
             when (cmd.type) {
                 "lock" -> lockNow()
@@ -132,6 +137,10 @@ class PolicyManager(
                 "noop" -> Log.d(TAG, "command noop id=${cmd.id}")
                 // Immediate follow-up is enqueued by CheckInRunner after apply.
                 "checkin_now" -> Log.d(TAG, "command checkin_now id=${cmd.id} (scheduler follow-up)")
+                "check_os_update" -> {
+                    val started = OsUpdater.requestCheck(context, dpm, admin)
+                    Log.i(TAG, "check_os_update started=$started id=${cmd.id}")
+                }
                 else -> Log.w(TAG, "unknown command ${cmd.type}")
             }
         }
@@ -143,6 +152,12 @@ class PolicyManager(
                 "failed=${report.failed.size} skipped=${report.skipped.size}",
         )
         Log.i(TAG, "Desired state policy flags applied")
+    }
+
+    /** Remember the server nonce. The next inventory's attestation cert is bound to it. */
+    fun noteAttestationChallenge(challengeB64: String?) {
+        if (challengeB64.isNullOrBlank()) return
+        compliancePrefs.edit().putString(KEY_ATTEST_NEXT, challengeB64).apply()
     }
 
     fun applySampleRestrictions() {
@@ -290,6 +305,71 @@ class PolicyManager(
         )
     }
 
+    private fun collectAttestation(): AttestationInfo {
+        val next = compliancePrefs.getString(KEY_ATTEST_NEXT, null)
+        val baked = compliancePrefs.getString(KEY_ATTEST_FOR_KEY, null)
+        val info = keyAttestor.attest(next, baked)
+        if (info.format == "keymint" && !next.isNullOrBlank()) {
+            compliancePrefs.edit().putString(KEY_ATTEST_FOR_KEY, next).apply()
+        }
+        return info
+    }
+
+    private fun collectDeviceUsers(): List<net.themark.grapheneosmdm.protocol.DeviceUser>? {
+        if (!isDeviceOwner()) return null
+        val um = context.getSystemService(Context.USER_SERVICE) as UserManager
+        val calling = try {
+            um.getSerialNumberForUser(android.os.Process.myUserHandle())
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "calling user serial unavailable", e)
+            -1L
+        }
+        val secondary = try {
+            dpm.getSecondaryUsers(admin).map { um.getSerialNumberForUser(it) }
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "secondary users unavailable", e)
+            emptyList()
+        }
+        return deviceUsers(calling, secondary)
+    }
+
+    private fun applyPreferredActivities(flags: PolicyFlags) {
+        val plan = preferredActivityPlan(
+            storedNameSet(KEY_PREFERRED),
+            flags.persistentPreferredActivities,
+        ) ?: return
+        for (pkg in plan.clearPackages) {
+            try {
+                dpm.clearPackagePersistentPreferredActivities(admin, pkg)
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "clear preferred activities failed $pkg", e)
+            }
+        }
+        val kept = mutableSetOf<String>()
+        for (spec in plan.add) {
+            if (addPreferred(spec)) kept += spec.packageName
+        }
+        compliancePrefs.edit().putStringSet(KEY_PREFERRED, HashSet(kept)).apply()
+    }
+
+    private fun addPreferred(spec: net.themark.grapheneosmdm.protocol.PersistentPreferredActivity): Boolean {
+        return try {
+            val filter = android.content.IntentFilter(spec.action)
+            spec.categories.orEmpty().forEach { filter.addCategory(it) }
+            spec.schemes.orEmpty().forEach { filter.addDataScheme(it) }
+            if (!spec.mimeType.isNullOrBlank()) filter.addDataType(spec.mimeType)
+            dpm.addPersistentPreferredActivity(
+                admin,
+                filter,
+                android.content.ComponentName(spec.packageName, spec.activity),
+            )
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "preferred activity failed ${spec.packageName}", e)
+            false
+        }
+    }
+
     private fun storedSecurityPatchOk(): Boolean? {
         if (!compliancePrefs.contains(KEY_SECURITY_PATCH_OK)) return null
         return compliancePrefs.getBoolean(KEY_SECURITY_PATCH_OK, true)
@@ -396,6 +476,9 @@ class PolicyManager(
         private const val KEY_HIDDEN = "hidden_packages"
         private const val KEY_PERMISSIONS = "permission_grants"
         private const val KEY_LOCATION_ENABLED = "location_enabled"
+        private const val KEY_ATTEST_NEXT = "attestation_challenge_next"
+        private const val KEY_ATTEST_FOR_KEY = "attestation_challenge_for_key"
+        private const val KEY_PREFERRED = "preferred_packages"
 
         private val RECOVERY_LOCATION_PERMISSIONS = listOf(
             Manifest.permission.ACCESS_COARSE_LOCATION,

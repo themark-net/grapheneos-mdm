@@ -128,9 +128,10 @@ This repo today:
 
 - Receiver is correctly exported for `DEVICE_ADMIN_ENABLED` / `PROFILE_PROVISIONING_COMPLETE` / `DEVICE_OWNER_CHANGED`.
 - `onProfileProvisioningComplete` schedules WorkManager check-ins (QR path still incomplete on stock GrapheneOS).
-- There are **no** activities for `ACTION_GET_PROVISIONING_MODE` or `ACTION_ADMIN_POLICY_COMPLIANCE`.
+- `GetProvisioningModeActivity` answers `ACTION_GET_PROVISIONING_MODE` with fully-managed mode when the wizard allows it.
+- `AdminPolicyComplianceActivity` answers `ACTION_ADMIN_POLICY_COMPLIANCE` with `RESULT_OK`.
 
-So: after GrapheneOS ships a wizard that speaks standard Managed Provisioning, we can generate a QR that points at `net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver` — **but we still need a small DPC provisioning implementation first**. That is follow-up work, not enabled by documentation alone.
+Those handlers are necessary once a wizard exists. They do not make 6-tap work on stock GrapheneOS today. After a release ships Managed Provisioning, a QR can name `net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver`.
 
 Illustrative QR JSON (do not treat as a working GrapheneOS payload today):
 

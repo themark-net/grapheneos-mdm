@@ -16,6 +16,31 @@
     },
     "isDeviceOwner": { "type": "boolean" },
     "model": { "type": "string" },
+    "users": {
+      "type": "array",
+      "description": "Calling user, then secondary users visible to the device owner.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["serial"],
+        "properties": {
+          "serial": { "type": "integer", "minimum": 0 },
+          "secondary": { "type": "boolean" }
+        }
+      }
+    },
+    "osUpdater": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "GrapheneOS System Updater package app.seamlessupdate.client.",
+      "required": ["packageName", "installed"],
+      "properties": {
+        "packageName": { "type": "string" },
+        "installed": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "versionName": { "type": "string" }
+      }
+    },
     "location": {
       "type": ["object", "null"],
       "additionalProperties": false,

@@ -74,6 +74,27 @@
         },
         "disallowConfigWifi": { "type": "boolean" },
         "disallowConfigMobileNetworks": { "type": "boolean" },
+        "disallowUserSwitch": {
+          "type": "boolean",
+          "description": "true blocks switching Android users. false clears it. Omit to leave it alone."
+        },
+        "persistentPreferredActivities": {
+          "type": "array",
+          "description": "Full set of persistent preferred activities this agent manages. Omit to leave them alone. Empty clears only packages this agent set.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["packageName", "activity", "action"],
+            "properties": {
+              "packageName": { "type": "string", "minLength": 1 },
+              "activity": { "type": "string", "minLength": 1 },
+              "action": { "type": "string", "minLength": 1 },
+              "categories": { "type": "array", "items": { "type": "string" } },
+              "schemes": { "type": "array", "items": { "type": "string" } },
+              "mimeType": { "type": "string" }
+            }
+          }
+        },
         "permissionGrants": {
           "type": "array",
           "description": "Full set of runtime permission overrides for other apps. Omit to leave grants alone. Entries that drop off are reset to default. The agent package is ignored.",
@@ -103,7 +124,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["noop", "lock", "wipe", "reboot", "checkin_now"]
+            "enum": ["noop", "lock", "wipe", "reboot", "checkin_now", "check_os_update"]
           },
           "id": { "type": "string" }
         }
