@@ -15,6 +15,18 @@ import net.themark.grapheneosmdm.receiver.DeviceAdminReceiver
 import java.time.Instant
 
 /**
+ * True adds the user restriction, false clears it. A null flag is omitted so the
+ * device setting is left alone.
+ */
+internal fun userRestrictionUpdates(flags: PolicyFlags): List<Pair<String, Boolean>> {
+    return listOfNotNull(
+        flags.disallowAddUser?.let { UserManager.DISALLOW_ADD_USER to it },
+        flags.disallowFactoryReset?.let { UserManager.DISALLOW_FACTORY_RESET to it },
+        flags.disallowInstallUnknownSources?.let { UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES to it },
+    )
+}
+
+/**
  * Collects inventory and applies [DesiredState] policy flags + desired-apps
  * enforcement on every check-in (issue #4 closes packages-logged residual from #3).
  */
@@ -70,15 +82,14 @@ class PolicyManager(
             return
         }
         val flags: PolicyFlags = state.policyFlags
-        if (flags.disallowAddUser == true) {
-            dpm.addUserRestriction(admin, UserManager.DISALLOW_ADD_USER)
-        }
-        if (flags.disallowFactoryReset == true) {
-            dpm.addUserRestriction(admin, UserManager.DISALLOW_FACTORY_RESET)
-        }
-        if (flags.disallowInstallUnknownSources == true) {
-            // Restricts *user* sideload; Device Owner PackageInstaller still works.
-            dpm.addUserRestriction(admin, UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
+        for ((restriction, disallow) in userRestrictionUpdates(flags)) {
+            if (disallow) {
+                // Unknown-sources restriction blocks user sideload; Device Owner
+                // PackageInstaller sessions still work.
+                dpm.addUserRestriction(admin, restriction)
+            } else {
+                dpm.clearUserRestriction(admin, restriction)
+            }
         }
         if (flags.cameraDisabled == true) {
             dpm.setCameraDisabled(admin, true)
