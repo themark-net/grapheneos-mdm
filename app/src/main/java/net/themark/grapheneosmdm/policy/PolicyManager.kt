@@ -101,6 +101,7 @@ class PolicyManager(
         }
         applyLockScreen(flags)
         applyPackageVisibility(flags)
+        applyPermissionGrants(flags)
         flags.lockTaskPackages?.let { pkgs ->
             dpm.setLockTaskPackages(admin, pkgs.toTypedArray())
         }
@@ -207,6 +208,42 @@ class PolicyManager(
         return compliancePrefs.getStringSet(key, emptySet())?.toSet().orEmpty()
     }
 
+    private fun applyPermissionGrants(flags: PolicyFlags) {
+        val change = permissionGrantChange(
+            storedNameSet(KEY_PERMISSIONS),
+            flags.permissionGrants,
+            context.packageName,
+        ) ?: return
+        val failedTurnOff = change.turnOff.filterNot { applyGrant(it) }
+        for (grant in change.assertOn) applyGrant(grant)
+        val persisted = persistedPackageSet(
+            change.next,
+            failedTurnOff.map { permissionKey(it.packageName, it.permission) },
+        )
+        compliancePrefs.edit().putStringSet(KEY_PERMISSIONS, HashSet(persisted)).apply()
+    }
+
+    private fun applyGrant(grant: PermissionApply): Boolean {
+        return try {
+            val ok = dpm.setPermissionGrantState(
+                admin,
+                grant.packageName,
+                grant.permission,
+                grant.grantState,
+            )
+            if (!ok) {
+                Log.w(
+                    TAG,
+                    "setPermissionGrantState rejected ${grant.packageName} ${grant.permission}",
+                )
+            }
+            ok
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "setPermissionGrantState failed ${grant.packageName} ${grant.permission}", e)
+            false
+        }
+    }
+
     fun lockNow() {
         if (isDeviceOwner()) dpm.lockNow()
     }
@@ -221,6 +258,7 @@ class PolicyManager(
         private const val KEY_SECURITY_PATCH_OK = "security_patch_ok"
         private const val KEY_SUSPENDED = "suspended_packages"
         private const val KEY_HIDDEN = "hidden_packages"
+        private const val KEY_PERMISSIONS = "permission_grants"
     }
 }
 

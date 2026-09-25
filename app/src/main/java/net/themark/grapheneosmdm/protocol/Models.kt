@@ -44,6 +44,16 @@ data class RequiredPackage(
     val signingCertSha256: String? = null,
 )
 
+/**
+ * One runtime-permission override for another app.
+ * [state] is `granted`, `denied`, or `default`.
+ */
+data class PermissionGrant(
+    val packageName: String,
+    val permission: String,
+    val state: String,
+)
+
 data class PolicyFlags(
     val disallowAddUser: Boolean? = null,
     val disallowFactoryReset: Boolean? = null,
@@ -54,6 +64,7 @@ data class PolicyFlags(
     val maximumTimeToLockMs: Long? = null,
     val suspendedPackages: List<String>? = null,
     val hiddenPackages: List<String>? = null,
+    val permissionGrants: List<PermissionGrant>? = null,
     val lockTaskPackages: List<String>? = null,
 )
 

@@ -1,10 +1,14 @@
 # Pending handoff
 
-Continuation note for the next harness. PR **#20** (Fixes #18) is open on `feat/issue-18-policy-apps` and is not merged. Section 1 is `main`.
+Continuation note for the next harness. PR **#20** (Fixes #18) is merged. The open work is issue **#21**, runtime permission grants, on `feat/issue-21-permission-grants`.
 
-Written 2026-09-25. Issues #12, #13, and #14 are closed.
+Written 2026-09-25. Issues #12, #13, #14, and #18 are closed.
 
-## Open: PR #20 — Fixes #18
+## Open: issue #21
+
+`policyFlags.permissionGrants` is the full set of runtime permission overrides for other apps (`granted` / `denied` / `default`). Omit the list to leave grants alone. An entry that drops off is reset to `default`. A reset that fails stays recorded so the next check-in retries it. The agent package is ignored. `setPermissionGrantState` only accepts a runtime permission the target app requests; a rejection is logged and does not block the rest of the list.
+
+## Shipped: PR #20 — Fixes #18
 
 Password complexity, lock timeout, suspend/hide, and uninstall of packages this agent installed.
 
@@ -19,8 +23,8 @@ Omit `passwordComplexity`, `maximumTimeToLockMs`, `suspendedPackages`, or `hidde
 | | |
 | --- | --- |
 | Branch | `main` |
-| SHA | `61685f827974275556cfa37531f5ed1e013acb19` |
-| Subject | Report a minimum security-patch floor (#15) |
+| SHA | `00283d27b036a5c531f00063225948e6364ad0aa` |
+| Subject | feat(mdm): password rule, hide/suspend, uninstall agent installs (#20) |
 
 ## 2. What shipped
 

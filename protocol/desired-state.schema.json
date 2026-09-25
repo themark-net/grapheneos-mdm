@@ -64,6 +64,20 @@
           "items": { "type": "string", "minLength": 1 },
           "description": "Full set of packages this agent should hide. Omit to leave hidden apps alone. The agent package is ignored."
         },
+        "permissionGrants": {
+          "type": "array",
+          "description": "Full set of runtime permission overrides for other apps. Omit to leave grants alone. Entries that drop off are reset to default. The agent package is ignored.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["packageName", "permission", "state"],
+            "properties": {
+              "packageName": { "type": "string", "minLength": 1 },
+              "permission": { "type": "string", "minLength": 1 },
+              "state": { "type": "string", "enum": ["granted", "denied", "default"] }
+            }
+          }
+        },
         "lockTaskPackages": {
           "type": "array",
           "items": { "type": "string" }

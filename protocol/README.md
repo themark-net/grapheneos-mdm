@@ -14,3 +14,5 @@ Wire format is JSON over HTTPS with **mutual TLS** (fleet/lab CA). See [docs/MTL
 Kotlin models live in `app/.../protocol/` and must stay field-compatible with these schemas.
 
 Lock-screen and visibility flags on `policyFlags`: `passwordComplexity` (`none` / `low` / `medium` / `high`), `maximumTimeToLockMs`, `suspendedPackages`, `hiddenPackages`. Omit a flag to leave that device setting alone. Packages this agent itself installed are uninstalled when they leave `requiredPackages`. Other installed apps are not.
+
+`permissionGrants` is the full set of runtime permission overrides for other apps (`granted` / `denied` / `default`). Omit it to leave grants alone. An entry that drops off is reset to `default`. The agent package is ignored.
