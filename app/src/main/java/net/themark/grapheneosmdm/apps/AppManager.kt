@@ -195,11 +195,20 @@ class AppManager(private val context: Context) {
         }
     }
 
-    fun uninstall(packageName: String): Boolean {
+    fun uninstall(
+        packageName: String,
+        awaitTimeoutMs: Long = DEFAULT_AWAIT_TIMEOUT_MS,
+    ): Boolean {
         if (!canSilentInstall()) return false
+        if (packageName.isBlank() || packageName == context.packageName) {
+            Log.w(TAG, "Refusing to uninstall $packageName")
+            return false
+        }
+        InstallSessionBus.registerPackage(packageName)
         return try {
             val callbackIntent = Intent(context, InstallResultReceiver::class.java).apply {
                 action = ACTION_INSTALL_RESULT
+                putExtra(EXTRA_UNINSTALL_PACKAGE, packageName)
             }
             val pending = PendingIntent.getBroadcast(
                 context,
@@ -208,8 +217,9 @@ class AppManager(private val context: Context) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
             )
             packageInstaller.uninstall(packageName, pending.intentSender)
-            true
+            InstallSessionBus.awaitPackage(packageName, awaitTimeoutMs).isSuccess
         } catch (e: Exception) {
+            InstallSessionBus.cancelPackage(packageName)
             Log.e(TAG, "Failed to uninstall $packageName", e)
             false
         }
@@ -219,6 +229,7 @@ class AppManager(private val context: Context) {
         private const val TAG = "AppManager"
         const val ACTION_INSTALL_RESULT = "net.themark.grapheneosmdm.INSTALL_RESULT"
         const val EXTRA_SESSION_ID = "session_id"
+        const val EXTRA_UNINSTALL_PACKAGE = "uninstall_package"
         const val DEFAULT_MAX_ATTEMPTS = 3
         const val DEFAULT_AWAIT_TIMEOUT_MS = 120_000L
     }
@@ -245,6 +256,9 @@ class InstallResultReceiver : android.content.BroadcastReceiver() {
         if (sessionId >= 0) {
             InstallSessionBus.complete(sessionId, mapped)
         }
+        intent.getStringExtra(AppManager.EXTRA_UNINSTALL_PACKAGE)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { InstallSessionBus.completePackage(it, mapped) }
         if (mapped.code == InstallStatusCode.PENDING_USER_ACTION) {
             // Should be rare for Device Owner + USER_ACTION_NOT_REQUIRED; surface intent if present.
             val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)

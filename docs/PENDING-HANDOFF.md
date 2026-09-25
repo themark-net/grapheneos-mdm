@@ -1,8 +1,18 @@
 # Pending handoff
 
-Continuation note for the next harness. Everything below is on `main` and can be read from git alone.
+Continuation note for the next harness. PR **#20** (Fixes #18) is open on `feat/issue-18-policy-apps` and is not merged. Section 1 is `main`.
 
-Written 2026-09-25 against the tip in section 1. Issues #12, #13, and #14 are closed.
+Written 2026-09-25. Issues #12, #13, and #14 are closed.
+
+## Open: PR #20 — Fixes #18
+
+Password complexity, lock timeout, suspend/hide, and uninstall of packages this agent installed.
+
+- `setRequiredPasswordComplexity(complexity)` is the API 31 method. It takes the complexity int only. `setMaximumTimeToLock(admin, lockMs)` still takes the admin component.
+- A package that fails to unsuspend or unhide stays in the persisted set so the next check-in retries it.
+- The agent package is never suspended, hidden, or uninstalled. Uninstall runs only for packages this agent installed, after the PackageInstaller result.
+
+Omit `passwordComplexity`, `maximumTimeToLockMs`, `suspendedPackages`, or `hiddenPackages` to leave that device setting alone. `passwordComplexity` is `none` / `low` / `medium` / `high`. `none` clears the requirement. `maximumTimeToLockMs` of `0` clears the timeout.
 
 ## 1. Tip
 
@@ -40,7 +50,7 @@ Earlier commits still on this tip, outside this stack: WorkManager scheduling (#
 
 GrapheneOS MDM stays **software-only**. There is no device-demo park unless the founder says otherwise.
 
-The only open GitHub issue is [#8](https://github.com/themark-net/grapheneos-mdm/issues/8) (DPC provisioning-mode activities after the GrapheneOS QR wizard ships). [docs/ENROLLMENT.md](ENROLLMENT.md), [docs/MTLS.md](MTLS.md), and [docs/SCHEDULING.md](SCHEDULING.md) already park that work.
+[#18](https://github.com/themark-net/grapheneos-mdm/issues/18) is the open PR #20 above. [#8](https://github.com/themark-net/grapheneos-mdm/issues/8) (DPC provisioning-mode activities after the GrapheneOS QR wizard ships) stays parked in [docs/ENROLLMENT.md](ENROLLMENT.md), [docs/MTLS.md](MTLS.md), and [docs/SCHEDULING.md](SCHEDULING.md).
 
 ## 4. Freezes
 

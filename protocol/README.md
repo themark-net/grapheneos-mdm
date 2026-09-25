@@ -12,3 +12,5 @@ Minimal JSON schemas shared by the Android agent and the lab check-in server.
 Wire format is JSON over HTTPS with **mutual TLS** (fleet/lab CA). See [docs/MTLS.md](../docs/MTLS.md).
 
 Kotlin models live in `app/.../protocol/` and must stay field-compatible with these schemas.
+
+Lock-screen and visibility flags on `policyFlags`: `passwordComplexity` (`none` / `low` / `medium` / `high`), `maximumTimeToLockMs`, `suspendedPackages`, `hiddenPackages`. Omit a flag to leave that device setting alone. Packages this agent itself installed are uninstalled when they leave `requiredPackages`. Other installed apps are not.

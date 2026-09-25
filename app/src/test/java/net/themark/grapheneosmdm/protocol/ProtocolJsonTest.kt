@@ -39,7 +39,13 @@ class ProtocolJsonTest {
                     "sha256": "c4b21224817aab1213dcdb25a690682422dcacf438bbab13fba7897aa3bdcc4b"
                   }
                 ],
-                "policyFlags": {"disallowAddUser": true, "minSecurityPatch": "2026-09-01"},
+                "policyFlags": {
+                  "disallowAddUser": true,
+                  "minSecurityPatch": "2026-09-01",
+                  "passwordComplexity": "low",
+                  "maximumTimeToLockMs": 30000,
+                  "suspendedPackages": ["com.example.game"]
+                },
                 "commands": [{"type": "noop", "id": "t1"}]
               },
               "shortLivedToken": {
@@ -57,6 +63,9 @@ class ProtocolJsonTest {
         assertNotNull(response.shortLivedToken)
         assertEquals("abc", response.shortLivedToken!!.token)
         assertEquals("2026-09-01", response.desiredState.policyFlags.minSecurityPatch)
+        assertEquals("low", response.desiredState.policyFlags.passwordComplexity)
+        assertEquals(30_000L, response.desiredState.policyFlags.maximumTimeToLockMs)
+        assertEquals(listOf("com.example.game"), response.desiredState.policyFlags.suspendedPackages)
     }
 
     @Test
