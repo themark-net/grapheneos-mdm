@@ -37,6 +37,7 @@ class PolicyManager(
 
     private val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
     private val admin = DeviceAdminReceiver.getComponentName(context)
+    private val compliancePrefs = context.getSharedPreferences(COMPLIANCE_PREFS, Context.MODE_PRIVATE)
 
     fun isDeviceOwner(): Boolean = dpm.isDeviceOwnerApp(context.packageName)
 
@@ -63,6 +64,7 @@ class PolicyManager(
             ) ?: "unknown",
             osVersion = Build.VERSION.RELEASE,
             securityPatch = Build.VERSION.SECURITY_PATCH,
+            securityPatchOk = storedSecurityPatchOk(),
             installedPackages = packages,
             isDeviceOwner = isDeviceOwner(),
             model = Build.MODEL,
@@ -75,6 +77,7 @@ class PolicyManager(
      * Apply policy flags, then persist + enforce the desired-apps list.
      */
     fun applyDesiredState(state: DesiredState) {
+        recordSecurityPatchFloor(state.policyFlags.minSecurityPatch)
         if (!isDeviceOwner()) {
             Log.w(TAG, "Not device owner - skipping policy apply")
             // Still persist desired list for when DO is granted.
@@ -134,6 +137,25 @@ class PolicyManager(
         Log.i(TAG, "Sample restrictions applied")
     }
 
+    private fun recordSecurityPatchFloor(minPatch: String?) {
+        val edit = compliancePrefs.edit()
+        if (minPatch.isNullOrBlank() || !SECURITY_PATCH_DATE.matches(minPatch)) {
+            edit.remove(KEY_SECURITY_PATCH_OK).apply()
+            return
+        }
+        val patch = Build.VERSION.SECURITY_PATCH.orEmpty()
+        val ok = securityPatchCompliant(patch, minPatch)
+        if (!ok) {
+            Log.w(TAG, "security patch $patch is older than $minPatch")
+        }
+        edit.putBoolean(KEY_SECURITY_PATCH_OK, ok).apply()
+    }
+
+    private fun storedSecurityPatchOk(): Boolean? {
+        if (!compliancePrefs.contains(KEY_SECURITY_PATCH_OK)) return null
+        return compliancePrefs.getBoolean(KEY_SECURITY_PATCH_OK, true)
+    }
+
     fun lockNow() {
         if (isDeviceOwner()) dpm.lockNow()
     }
@@ -144,6 +166,8 @@ class PolicyManager(
 
     companion object {
         private const val TAG = "PolicyManager"
+        private const val COMPLIANCE_PREFS = "policy_compliance"
+        private const val KEY_SECURITY_PATCH_OK = "security_patch_ok"
     }
 }
 
