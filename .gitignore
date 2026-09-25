@@ -28,3 +28,11 @@ server/lab-certs/
 # Gradle wrapper jar is committed; local caches are not
 .gradle/
 **/build/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Lab fleet sqlite (created by lab_checkin.py --db)
+*.sqlite
+*.sqlite3
