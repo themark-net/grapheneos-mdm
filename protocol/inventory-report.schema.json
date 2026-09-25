@@ -10,6 +10,10 @@
     "deviceId": { "type": "string", "minLength": 1 },
     "osVersion": { "type": "string", "minLength": 1 },
     "securityPatch": { "type": "string", "minLength": 1 },
+    "securityPatchOk": {
+      "type": "boolean",
+      "description": "Set on the check-in after a desired state with minSecurityPatch was applied. Omitted when no floor is in effect."
+    },
     "isDeviceOwner": { "type": "boolean" },
     "model": { "type": "string" },
     "installedPackages": {

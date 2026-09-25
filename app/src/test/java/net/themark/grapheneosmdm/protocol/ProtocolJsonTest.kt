@@ -39,7 +39,7 @@ class ProtocolJsonTest {
                     "sha256": "c4b21224817aab1213dcdb25a690682422dcacf438bbab13fba7897aa3bdcc4b"
                   }
                 ],
-                "policyFlags": {"disallowAddUser": true},
+                "policyFlags": {"disallowAddUser": true, "minSecurityPatch": "2026-09-01"},
                 "commands": [{"type": "noop", "id": "t1"}]
               },
               "shortLivedToken": {
@@ -56,6 +56,7 @@ class ProtocolJsonTest {
         assertEquals(64, response.desiredState.requiredPackages[0].sha256!!.length)
         assertNotNull(response.shortLivedToken)
         assertEquals("abc", response.shortLivedToken!!.token)
+        assertEquals("2026-09-01", response.desiredState.policyFlags.minSecurityPatch)
     }
 
     @Test

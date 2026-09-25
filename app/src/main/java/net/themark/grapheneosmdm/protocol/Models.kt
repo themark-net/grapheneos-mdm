@@ -22,6 +22,7 @@ data class InventoryReport(
     val deviceId: String,
     val osVersion: String,
     val securityPatch: String,
+    val securityPatchOk: Boolean? = null,
     val installedPackages: List<PackageVersion>,
     val isDeviceOwner: Boolean? = null,
     val model: String? = null,
@@ -48,6 +49,7 @@ data class PolicyFlags(
     val disallowFactoryReset: Boolean? = null,
     val disallowInstallUnknownSources: Boolean? = null,
     val cameraDisabled: Boolean? = null,
+    val minSecurityPatch: String? = null,
     val lockTaskPackages: List<String>? = null,
 )
 

@@ -83,6 +83,6 @@ Later: Ansible modules or a Terraform-like provider that talks to the same API.
 - Exact policy schema (YAML/JSON) that maps cleanly to Ansible inventory / group_vars.
 - How to handle GrapheneOS multi-user / profiles.
 - Whether to implement a minimal launcher or stay invisible.
-- OTA / OS update enforcement (GrapheneOS has its own updater; we can at least report version and block if too old).
+- OTA / OS update enforcement: desired state may set `minSecurityPatch`. The agent reports `securityPatchOk` on the next inventory and does not drive the GrapheneOS updater or wipe the device.
 - Battery / network efficiency: addressed by WorkManager constraints (see docs/SCHEDULING.md).
 - After SetupWizard2 QR lands: add provisioning-mode / policy-compliance activities for this DPC.

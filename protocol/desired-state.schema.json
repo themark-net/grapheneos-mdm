@@ -39,6 +39,11 @@
         "disallowFactoryReset": { "type": "boolean" },
         "disallowInstallUnknownSources": { "type": "boolean" },
         "cameraDisabled": { "type": "boolean" },
+        "minSecurityPatch": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "Device SECURITY_PATCH must be this date or newer. The agent does not wipe; the next inventory reports securityPatchOk."
+        },
         "lockTaskPackages": {
           "type": "array",
           "items": { "type": "string" }
