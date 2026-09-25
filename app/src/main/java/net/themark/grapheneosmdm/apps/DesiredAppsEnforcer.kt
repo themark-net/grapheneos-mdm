@@ -31,16 +31,18 @@ class DesiredAppsEnforcer(
     fun enforceStored(): EnforceReport = enforce(store.load())
 
     fun enforce(desired: List<RequiredPackage>): EnforceReport {
-        if (desired.isEmpty()) {
+        val tracked = store.installedByAgent()
+        if (desired.isEmpty() && tracked.isEmpty()) {
             return EnforceReport(planned = emptyList())
         }
         if (!appManager.canSilentInstall()) {
             Log.w(TAG, "Skipping desired-apps enforce (not DO / not system user)")
+            val names = (desired.map { it.packageName } + tracked).distinct()
             return EnforceReport(
-                planned = desired.map {
-                    DesiredAppAction.MissingArtifact(it.packageName, "silent install unavailable")
+                planned = names.map {
+                    DesiredAppAction.MissingArtifact(it, "silent install unavailable")
                 },
-                skipped = desired.map { it.packageName },
+                skipped = names,
             )
         }
 
@@ -48,7 +50,12 @@ class DesiredAppsEnforcer(
             req.packageName to (appManager.installedVersionCode(req.packageName) ?: -1L)
         }.filterValues { it >= 0 }
 
-        val planned = DesiredAppsPlanner.plan(desired, installed)
+        val planned = DesiredAppsPlanner.plan(
+            desired,
+            installed,
+            tracked,
+            context.packageName,
+        )
         val ok = mutableListOf<String>()
         val failed = mutableListOf<String>()
         val skipped = mutableListOf<String>()
@@ -65,7 +72,22 @@ class DesiredAppsEnforcer(
                 }
                 is DesiredAppAction.NeedsInstall -> {
                     val result = downloadVerifyInstall(action.required, action.kind)
-                    if (result) ok += action.required.packageName else failed += action.required.packageName
+                    if (result) {
+                        ok += action.required.packageName
+                        if (action.required.packageName != context.packageName) {
+                            store.trackInstalled(action.required.packageName)
+                        }
+                    } else {
+                        failed += action.required.packageName
+                    }
+                }
+                is DesiredAppAction.NeedsUninstall -> {
+                    if (appManager.uninstall(action.packageName)) {
+                        store.untrackInstalled(action.packageName)
+                        ok += action.packageName
+                    } else {
+                        failed += action.packageName
+                    }
                 }
             }
         }

@@ -44,6 +44,26 @@
           "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
           "description": "Device SECURITY_PATCH must be this date or newer. The agent does not wipe; the next inventory reports securityPatchOk."
         },
+        "passwordComplexity": {
+          "type": "string",
+          "enum": ["none", "low", "medium", "high"],
+          "description": "Required password complexity. none clears it. Omit to leave the device alone."
+        },
+        "maximumTimeToLockMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Lock timeout in milliseconds. 0 clears the limit. Omit to leave the device alone."
+        },
+        "suspendedPackages": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Full set of packages this agent should suspend. Omit to leave suspension alone. The agent package is ignored."
+        },
+        "hiddenPackages": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Full set of packages this agent should hide. Omit to leave hidden apps alone. The agent package is ignored."
+        },
         "lockTaskPackages": {
           "type": "array",
           "items": { "type": "string" }

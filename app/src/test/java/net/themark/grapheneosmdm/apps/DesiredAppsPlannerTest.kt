@@ -59,4 +59,34 @@ class DesiredAppsPlannerTest {
         val action = plan[0] as DesiredAppAction.MissingArtifact
         assertTrue(action.reason.contains("sha256"))
     }
+
+    @Test
+    fun uninstallsOnlyPackagesTheAgentInstalled() {
+        val plan = DesiredAppsPlanner.plan(
+            desired = listOf(RequiredPackage("com.keep")),
+            installedVersionCodes = mapOf(
+                "com.keep" to 1L,
+                "com.user.app" to 1L,
+                "com.we.installed" to 2L,
+            ),
+            installedByAgent = setOf("com.we.installed", "com.keep"),
+            selfPackage = "net.themark.grapheneosmdm",
+        )
+        val uninstalls = plan.filterIsInstance<DesiredAppAction.NeedsUninstall>()
+        assertEquals(listOf("com.we.installed"), uninstalls.map { it.packageName })
+    }
+
+    @Test
+    fun doesNotUninstallSelfEvenIfTracked() {
+        val plan = DesiredAppsPlanner.plan(
+            desired = emptyList(),
+            installedVersionCodes = emptyMap(),
+            installedByAgent = setOf("net.themark.grapheneosmdm", "com.we.installed"),
+            selfPackage = "net.themark.grapheneosmdm",
+        )
+        assertEquals(
+            listOf(DesiredAppAction.NeedsUninstall("com.we.installed")),
+            plan,
+        )
+    }
 }

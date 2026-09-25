@@ -99,6 +99,8 @@ class PolicyManager(
         } else if (flags.cameraDisabled == false) {
             dpm.setCameraDisabled(admin, false)
         }
+        applyLockScreen(flags)
+        applyPackageVisibility(flags)
         flags.lockTaskPackages?.let { pkgs ->
             dpm.setLockTaskPackages(admin, pkgs.toTypedArray())
         }
@@ -156,6 +158,48 @@ class PolicyManager(
         return compliancePrefs.getBoolean(KEY_SECURITY_PATCH_OK, true)
     }
 
+    private fun applyLockScreen(flags: PolicyFlags) {
+        val complexity = passwordComplexityConstant(flags.passwordComplexity)
+        if (complexity != null) {
+            dpm.setRequiredPasswordComplexity(admin, complexity)
+        } else if (!flags.passwordComplexity.isNullOrBlank()) {
+            Log.w(TAG, "unknown passwordComplexity ${flags.passwordComplexity}")
+        }
+        val lockMs = maximumTimeToLockMs(flags.maximumTimeToLockMs)
+        if (lockMs != null) {
+            dpm.setMaximumTimeToLock(admin, lockMs)
+        }
+    }
+
+    private fun applyPackageVisibility(flags: PolicyFlags) {
+        applyPackageSet(flags.suspendedPackages, KEY_SUSPENDED) { name, on ->
+            val failed = dpm.setPackagesSuspended(admin, arrayOf(name), on)
+            if (failed.isNotEmpty()) {
+                Log.w(TAG, "setPackagesSuspended failed name=$name suspended=$on")
+            }
+        }
+        applyPackageSet(flags.hiddenPackages, KEY_HIDDEN) { name, on ->
+            if (!dpm.setApplicationHidden(admin, name, on)) {
+                Log.w(TAG, "setApplicationHidden failed name=$name hidden=$on")
+            }
+        }
+    }
+
+    private fun applyPackageSet(
+        desired: List<String>?,
+        key: String,
+        applyOne: (String, Boolean) -> Unit,
+    ) {
+        val change = packageSetChange(storedNameSet(key), desired, context.packageName) ?: return
+        for (name in change.turnOff) applyOne(name, false)
+        for (name in change.assertOn) applyOne(name, true)
+        compliancePrefs.edit().putStringSet(key, HashSet(change.next)).apply()
+    }
+
+    private fun storedNameSet(key: String): Set<String> {
+        return compliancePrefs.getStringSet(key, emptySet())?.toSet().orEmpty()
+    }
+
     fun lockNow() {
         if (isDeviceOwner()) dpm.lockNow()
     }
@@ -168,6 +212,8 @@ class PolicyManager(
         private const val TAG = "PolicyManager"
         private const val COMPLIANCE_PREFS = "policy_compliance"
         private const val KEY_SECURITY_PATCH_OK = "security_patch_ok"
+        private const val KEY_SUSPENDED = "suspended_packages"
+        private const val KEY_HIDDEN = "hidden_packages"
     }
 }
 

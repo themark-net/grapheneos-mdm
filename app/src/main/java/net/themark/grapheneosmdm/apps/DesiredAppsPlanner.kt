@@ -16,14 +16,17 @@ sealed class DesiredAppAction {
         val packageName: String,
         val reason: String,
     ) : DesiredAppAction()
+    data class NeedsUninstall(val packageName: String) : DesiredAppAction()
 }
 
 object DesiredAppsPlanner {
     fun plan(
         desired: List<RequiredPackage>,
         installedVersionCodes: Map<String, Long>,
+        installedByAgent: Set<String> = emptySet(),
+        selfPackage: String = "",
     ): List<DesiredAppAction> {
-        return desired.map { req ->
+        val packageActions = desired.map { req ->
             val current = installedVersionCodes[req.packageName]
             val satisfied = when {
                 current == null -> false
@@ -49,5 +52,11 @@ object DesiredAppsPlanner {
                 }
             }
         }
+        val desiredNames = desired.map { it.packageName }.toSet()
+        val uninstalls = installedByAgent
+            .filter { it.isNotBlank() && it != selfPackage && it !in desiredNames }
+            .sorted()
+            .map { DesiredAppAction.NeedsUninstall(it) }
+        return packageActions + uninstalls
     }
 }

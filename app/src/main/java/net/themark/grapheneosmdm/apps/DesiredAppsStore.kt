@@ -28,8 +28,23 @@ class DesiredAppsStore(context: Context) {
         }
     }
 
+    /** Packages this agent has successfully installed. Never includes a blank name. */
+    fun installedByAgent(): Set<String> {
+        return prefs.getStringSet(KEY_INSTALLED, emptySet()).orEmpty().toSet()
+    }
+
+    fun trackInstalled(packageName: String) {
+        if (packageName.isBlank()) return
+        prefs.edit().putStringSet(KEY_INSTALLED, HashSet(installedByAgent() + packageName)).apply()
+    }
+
+    fun untrackInstalled(packageName: String) {
+        prefs.edit().putStringSet(KEY_INSTALLED, HashSet(installedByAgent() - packageName)).apply()
+    }
+
     companion object {
         private const val PREFS = "desired_apps"
         private const val KEY_JSON = "desired_state_json"
+        private const val KEY_INSTALLED = "installed_by_agent"
     }
 }

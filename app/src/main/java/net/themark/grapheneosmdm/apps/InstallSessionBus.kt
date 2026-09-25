@@ -14,23 +14,49 @@ object InstallSessionBus {
         val result: AtomicReference<InstallStatus> = AtomicReference(),
     )
 
-    private val waiters = ConcurrentHashMap<Int, Waiter>()
+    private val waiters = ConcurrentHashMap<Any, Waiter>()
 
     fun register(sessionId: Int) {
         waiters[sessionId] = Waiter()
     }
 
     fun complete(sessionId: Int, status: InstallStatus) {
-        val w = waiters[sessionId] ?: return
+        completeKey(sessionId, status)
+    }
+
+    fun await(sessionId: Int, timeoutMs: Long): InstallStatus {
+        return awaitKey(sessionId, timeoutMs, sessionId)
+    }
+
+    fun registerPackage(packageName: String) {
+        waiters[packageKey(packageName)] = Waiter()
+    }
+
+    fun completePackage(packageName: String, status: InstallStatus) {
+        completeKey(packageKey(packageName), status)
+    }
+
+    fun awaitPackage(packageName: String, timeoutMs: Long): InstallStatus {
+        return awaitKey(packageKey(packageName), timeoutMs, sessionId = null)
+    }
+
+    fun cancelPackage(packageName: String) {
+        waiters.remove(packageKey(packageName))
+    }
+
+    private fun packageKey(packageName: String): String = "uninstall:$packageName"
+
+    private fun completeKey(key: Any, status: InstallStatus) {
+        val w = waiters[key] ?: return
         w.result.compareAndSet(null, status)
         w.latch.countDown()
     }
 
-    fun await(sessionId: Int, timeoutMs: Long): InstallStatus {
-        val w = waiters[sessionId]
+    private fun awaitKey(key: Any, timeoutMs: Long, sessionId: Int?): InstallStatus {
+        val w = waiters[key]
             ?: return InstallStatus(
                 InstallStatusCode.UNKNOWN,
-                message = "no waiter registered for session $sessionId",
+                message = "no waiter registered for $key",
                 sessionId = sessionId,
             )
         return try {
@@ -49,7 +75,7 @@ object InstallSessionBus {
                 )
             }
         } finally {
-            waiters.remove(sessionId)
+            waiters.remove(key)
         }
     }
 }

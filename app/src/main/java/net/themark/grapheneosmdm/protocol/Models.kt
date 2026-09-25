@@ -50,6 +50,10 @@ data class PolicyFlags(
     val disallowInstallUnknownSources: Boolean? = null,
     val cameraDisabled: Boolean? = null,
     val minSecurityPatch: String? = null,
+    val passwordComplexity: String? = null,
+    val maximumTimeToLockMs: Long? = null,
+    val suspendedPackages: List<String>? = null,
+    val hiddenPackages: List<String>? = null,
     val lockTaskPackages: List<String>? = null,
 )
 
