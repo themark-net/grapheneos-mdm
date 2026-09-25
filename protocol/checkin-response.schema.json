@@ -18,6 +18,11 @@
       },
       "required": ["token", "expiresAt"]
     },
+    "attestationChallenge": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base64 nonce. The next inventory's key attestation certificate is bound to it."
+    },
     "message": { "type": "string" }
   }
 }

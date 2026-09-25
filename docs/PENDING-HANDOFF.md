@@ -1,6 +1,6 @@
 # Pending handoff
 
-Continuation note for the next harness. Issue **#24** (lost-device GPS) is merged via PR #25. No open feature work beyond freezes below.
+Continuation note for the next harness. Issue **#24** is merged. The open client work is issue **#26** on `feat/issue-26-client-gaps`: key attestation, persistent preferred activities, user serials, an OS-updater check, and the QR provisioning activities. Issue **#8** stays open because stock GrapheneOS still has no 6-tap wizard.
 
 Written 2026-09-25. Issues #12, #13, #14, #18, #21, and #24 are closed.
 
