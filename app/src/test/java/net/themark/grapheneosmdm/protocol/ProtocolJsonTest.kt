@@ -44,7 +44,14 @@ class ProtocolJsonTest {
                   "minSecurityPatch": "2026-09-01",
                   "passwordComplexity": "low",
                   "maximumTimeToLockMs": 30000,
-                  "suspendedPackages": ["com.example.game"]
+                  "suspendedPackages": ["com.example.game"],
+                  "permissionGrants": [
+                    {
+                      "packageName": "com.example.app",
+                      "permission": "android.permission.CAMERA",
+                      "state": "granted"
+                    }
+                  ]
                 },
                 "commands": [{"type": "noop", "id": "t1"}]
               },
@@ -66,6 +73,10 @@ class ProtocolJsonTest {
         assertEquals("low", response.desiredState.policyFlags.passwordComplexity)
         assertEquals(30_000L, response.desiredState.policyFlags.maximumTimeToLockMs)
         assertEquals(listOf("com.example.game"), response.desiredState.policyFlags.suspendedPackages)
+        val grant = response.desiredState.policyFlags.permissionGrants!!.single()
+        assertEquals("com.example.app", grant.packageName)
+        assertEquals("android.permission.CAMERA", grant.permission)
+        assertEquals("granted", grant.state)
     }
 
     @Test
