@@ -1,13 +1,22 @@
 package net.themark.grapheneosmdm.policy
 
+import android.Manifest
 import android.app.admin.DevicePolicyManager
 import android.content.Context
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.Build
+import android.os.Looper
 import android.os.UserManager
 import android.util.Log
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import net.themark.grapheneosmdm.apps.DesiredAppsEnforcer
 import net.themark.grapheneosmdm.protocol.AttestationInfo
 import net.themark.grapheneosmdm.protocol.DesiredState
+import net.themark.grapheneosmdm.protocol.DeviceLocation
 import net.themark.grapheneosmdm.protocol.InventoryReport
 import net.themark.grapheneosmdm.protocol.PackageVersion
 import net.themark.grapheneosmdm.protocol.PolicyFlags
@@ -23,6 +32,8 @@ internal fun userRestrictionUpdates(flags: PolicyFlags): List<Pair<String, Boole
         flags.disallowAddUser?.let { UserManager.DISALLOW_ADD_USER to it },
         flags.disallowFactoryReset?.let { UserManager.DISALLOW_FACTORY_RESET to it },
         flags.disallowInstallUnknownSources?.let { UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES to it },
+        flags.disallowConfigWifi?.let { UserManager.DISALLOW_CONFIG_WIFI to it },
+        flags.disallowConfigMobileNetworks?.let { UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS to it },
     )
 }
 
@@ -68,6 +79,7 @@ class PolicyManager(
             installedPackages = packages,
             isDeviceOwner = isDeviceOwner(),
             model = Build.MODEL,
+            location = readRecoveryLocation(),
             attestation = AttestationInfo(format = "none"),
             reportedAt = Instant.now().toString(),
         )
@@ -85,6 +97,9 @@ class PolicyManager(
             return
         }
         val flags: PolicyFlags = state.policyFlags
+        ensureRecoveryLocationPermissions()
+        applyLocationRadio(flags)
+        applyUsbDataSignaling(flags)
         for ((restriction, disallow) in userRestrictionUpdates(flags)) {
             if (disallow) {
                 // Unknown-sources restriction blocks user sideload; Device Owner
@@ -152,6 +167,127 @@ class PolicyManager(
             Log.w(TAG, "security patch $patch is older than $minPatch")
         }
         edit.putBoolean(KEY_SECURITY_PATCH_OK, ok).apply()
+    }
+
+    private fun ensureRecoveryLocationPermissions() {
+        for (perm in RECOVERY_LOCATION_PERMISSIONS) {
+            grantSelf(perm)
+        }
+    }
+
+    private fun applyLocationRadio(flags: PolicyFlags) {
+        val enabled = flags.locationEnabled ?: return
+        if (enabled) {
+            grantSelf(GRAPHENE_OTHER_SENSORS)
+        }
+        try {
+            dpm.setLocationEnabled(admin, enabled)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "setLocationEnabled($enabled) failed", e)
+        }
+        compliancePrefs.edit().putBoolean(KEY_LOCATION_ENABLED, enabled).apply()
+    }
+
+    private fun applyUsbDataSignaling(flags: PolicyFlags) {
+        val enabled = flags.usbDataSignalingEnabled ?: return
+        try {
+            dpm.setUsbDataSignalingEnabled(enabled)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "setUsbDataSignalingEnabled($enabled) failed", e)
+        }
+    }
+
+    private fun grantSelf(permission: String) {
+        try {
+            val ok = dpm.setPermissionGrantState(
+                admin,
+                context.packageName,
+                permission,
+                DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED,
+            )
+            if (!ok && permission != GRAPHENE_OTHER_SENSORS) {
+                Log.w(TAG, "permission not granted: $permission")
+            }
+        } catch (e: RuntimeException) {
+            if (permission != GRAPHENE_OTHER_SENSORS) {
+                Log.w(TAG, "permission grant failed: $permission", e)
+            }
+        }
+    }
+
+    private fun readRecoveryLocation(): DeviceLocation? {
+        if (!compliancePrefs.getBoolean(KEY_LOCATION_ENABLED, false)) return null
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+        val now = System.currentTimeMillis()
+        val cached = lastKnownFixes(lm)
+        var chosen = pickRecoveryFix(cached, now)
+        if (shouldWaitForGps(chosen, now)) {
+            val fresh = waitForGps(lm)
+            if (fresh != null) {
+                chosen = pickRecoveryFix(cached + fresh, now)
+            }
+        }
+        return chosen?.let { toDeviceLocation(it) }
+    }
+
+    private fun lastKnownFixes(lm: LocationManager): List<CandidateFix> {
+        return listOf(
+            LocationManager.GPS_PROVIDER,
+            LocationManager.FUSED_PROVIDER,
+            LocationManager.NETWORK_PROVIDER,
+        ).mapNotNull { provider ->
+            val loc = try {
+                lm.getLastKnownLocation(provider)
+            } catch (e: SecurityException) {
+                Log.w(TAG, "last location denied for $provider", e)
+                null
+            }
+            loc?.let { candidate(it) }
+        }
+    }
+
+    private fun waitForGps(lm: LocationManager): CandidateFix? {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            Log.w(TAG, "skipping GPS wait on the main thread")
+            return null
+        }
+        val ref = AtomicReference<Location>()
+        val latch = CountDownLatch(1)
+        val listener = LocationListener { loc ->
+            ref.set(loc)
+            latch.countDown()
+        }
+        try {
+            lm.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                0L,
+                0f,
+                listener,
+                Looper.getMainLooper(),
+            )
+            latch.await(GPS_WAIT_MS, TimeUnit.MILLISECONDS)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "GPS wait failed", e)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+        } finally {
+            try {
+                lm.removeUpdates(listener)
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "removeUpdates failed", e)
+            }
+        }
+        return ref.get()?.let { candidate(it) }
+    }
+
+    private fun candidate(loc: Location): CandidateFix {
+        return CandidateFix(
+            latitude = loc.latitude,
+            longitude = loc.longitude,
+            accuracyMeters = loc.accuracy,
+            provider = loc.provider,
+            timeEpochMs = loc.time,
+        )
     }
 
     private fun storedSecurityPatchOk(): Boolean? {
@@ -259,6 +395,13 @@ class PolicyManager(
         private const val KEY_SUSPENDED = "suspended_packages"
         private const val KEY_HIDDEN = "hidden_packages"
         private const val KEY_PERMISSIONS = "permission_grants"
+        private const val KEY_LOCATION_ENABLED = "location_enabled"
+
+        private val RECOVERY_LOCATION_PERMISSIONS = listOf(
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+        )
     }
 }
 

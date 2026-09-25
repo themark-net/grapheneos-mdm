@@ -11,6 +11,18 @@ data class PackageVersion(
     val versionCode: Long? = null,
 )
 
+/**
+ * One position from the device. [provider] is `gps`, `fused`, or `network`.
+ * [time] is when the provider produced the fix, not when the check-in ran.
+ */
+data class DeviceLocation(
+    val latitude: Double,
+    val longitude: Double,
+    val accuracyMeters: Double? = null,
+    val provider: String? = null,
+    val time: String? = null,
+)
+
 data class AttestationInfo(
     val format: String = "none",
     val payloadB64: String? = null,
@@ -26,6 +38,7 @@ data class InventoryReport(
     val installedPackages: List<PackageVersion>,
     val isDeviceOwner: Boolean? = null,
     val model: String? = null,
+    val location: DeviceLocation? = null,
     val attestation: AttestationInfo? = null,
     val reportedAt: String? = null,
 )
@@ -65,6 +78,10 @@ data class PolicyFlags(
     val suspendedPackages: List<String>? = null,
     val hiddenPackages: List<String>? = null,
     val permissionGrants: List<PermissionGrant>? = null,
+    val locationEnabled: Boolean? = null,
+    val usbDataSignalingEnabled: Boolean? = null,
+    val disallowConfigWifi: Boolean? = null,
+    val disallowConfigMobileNetworks: Boolean? = null,
     val lockTaskPackages: List<String>? = null,
 )
 

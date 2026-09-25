@@ -65,7 +65,8 @@ class CheckInWorker(
             ForegroundInfo(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
             )
         } else {
             ForegroundInfo(NOTIFICATION_ID, notification)
