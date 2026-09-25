@@ -1,12 +1,14 @@
 # Pending handoff
 
-Continuation note for the next harness. Issue **#21** is merged. The open work is issue **#24**, lost-device GPS, on `feat/issue-24-location`.
+Continuation note for the next harness. Issue **#24** (lost-device GPS) is merged via PR #25. No open feature work beyond freezes below.
 
-Written 2026-09-25. Issues #12, #13, #14, #18, and #21 are closed.
+Written 2026-09-25. Issues #12, #13, #14, #18, #21, and #24 are closed.
 
-## Open: issue #24
+## Shipped: issue #24 — PR #25
 
-`policyFlags.locationEnabled` turns the location radio on and the next inventory includes a GNSS fix (`location`). The agent grants itself coarse, fine, and background location. While the radio is on it also grants GrapheneOS `android.permission.OTHER_SENSORS` when that permission exists. `usbDataSignalingEnabled`, `disallowConfigWifi`, and `disallowConfigMobileNetworks` are the USB and network controls that were missing from the client. Omit a flag to leave that setting alone.
+Squash `fba9f9f87089e0ede86b48390cb97910cf6c55d2` (was head `7b71755`).
+
+`policyFlags.locationEnabled` turns the location radio on and the next inventory includes a location fix. The agent grants itself coarse, fine, and background location. While the radio is on it also grants GrapheneOS `android.permission.OTHER_SENSORS` when that permission exists. A fresh GNSS fix beats a fresh network fix; a fresh network fix beats a stale GNSS pin; otherwise wait up to 8s for one GPS update, then newest cached. `false` turns the radio off and stops reporting. Omit leaves the radio alone. `usbDataSignalingEnabled`, `disallowConfigWifi`, and `disallowConfigMobileNetworks` use the same add/clear/omit rule as other flags.
 
 ## Shipped: issue #21
 
@@ -27,12 +29,12 @@ Omit `passwordComplexity`, `maximumTimeToLockMs`, `suspendedPackages`, or `hidde
 | | |
 | --- | --- |
 | Branch | `main` |
-| SHA | `03e0743` |
-| Subject | docs: AGENTS.md Testing standing rule (Trophy / no tautology) |
+| SHA | `fba9f9f` |
+| Subject | Report a GPS fix for lost-device recovery (#25) |
 
 ## 2. What shipped
 
-These three squash merges are the stack on that tip, oldest first.
+Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24.
 
 ### PR #17 — clear user restrictions — Fixes #14
 
@@ -48,9 +50,17 @@ Optional `--db` sqlite on the lab check-in server stores the last inventory per 
 
 ### PR #15 — minimum security-patch floor — Fixes #13
 
-Squash `61685f827974275556cfa37531f5ed1e013acb19` (this tip).
+Squash `61685f827974275556cfa37531f5ed1e013acb19`.
 
 Desired state may set `policyFlags.minSecurityPatch` as `YYYY-MM-DD`. The agent compares that date to `Build.VERSION.SECURITY_PATCH`, logs when the device patch is older, and reports `securityPatchOk` on the next inventory. It does not drive the GrapheneOS updater and it does not wipe the device. Schema fields live in [protocol/desired-state.schema.json](../protocol/desired-state.schema.json) and [protocol/inventory-report.schema.json](../protocol/inventory-report.schema.json).
+
+### PR #22 — permission grants — Fixes #21
+
+Squash `b0b79aeb1cabc1a41ebb53bcc41709a088688f03`.
+
+### PR #25 — lost-device GPS — Fixes #24
+
+Squash `fba9f9f87089e0ede86b48390cb97910cf6c55d2`.
 
 Earlier commits still on this tip, outside this stack: WorkManager scheduling (#11, issue #5), desired-apps enforce (#10, issue #4), mTLS check-in (#9, issue #3), and the enrollment guide (#7).
 
@@ -58,7 +68,7 @@ Earlier commits still on this tip, outside this stack: WorkManager scheduling (#
 
 GrapheneOS MDM stays **software-only**. There is no device-demo park unless the founder says otherwise.
 
-[#18](https://github.com/themark-net/grapheneos-mdm/issues/18) is the open PR #20 above. [#8](https://github.com/themark-net/grapheneos-mdm/issues/8) (DPC provisioning-mode activities after the GrapheneOS QR wizard ships) stays parked in [docs/ENROLLMENT.md](ENROLLMENT.md), [docs/MTLS.md](MTLS.md), and [docs/SCHEDULING.md](SCHEDULING.md).
+[#8](https://github.com/themark-net/grapheneos-mdm/issues/8) (DPC provisioning-mode activities after the GrapheneOS QR wizard ships) stays parked in [docs/ENROLLMENT.md](ENROLLMENT.md), [docs/MTLS.md](MTLS.md), and [docs/SCHEDULING.md](SCHEDULING.md).
 
 ## 4. Freezes
 
