@@ -10,7 +10,18 @@ path: `GET /v1/catalog/<file>` from `--catalog-dir`.
 cd server
 ./gen-lab-certs.sh lab-certs
 python3 lab_checkin.py --certs lab-certs --port 8443 \
-  --desired desired-state.example.json --catalog-dir ./catalog
+  --desired desired-state.example.json --catalog-dir ./catalog \
+  --db fleet.sqlite
+```
+
+`--db` is optional. Without it, every device receives the `--desired` file and
+inventory is only logged. With it, check-ins are stored and a per-device
+override replaces that file for one device id:
+
+```bash
+python3 fleet_store.py --db fleet.sqlite list
+python3 fleet_store.py --db fleet.sqlite set-desired pixel-7 desired-state.example.json
+python3 fleet_store.py --db fleet.sqlite clear-desired pixel-7
 ```
 
 Smoke with client cert:
@@ -49,5 +60,4 @@ server base URL via `SecureConfigStore` (e.g. `https://10.42.0.x:8443`).
 ## Out of scope (parked)
 
 - QR enrollment wizard (#8)
-- WorkManager check-in (#5)
 - Commercial MDM packaging
