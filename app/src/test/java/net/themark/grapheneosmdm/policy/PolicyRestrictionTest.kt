@@ -15,6 +15,8 @@ class PolicyRestrictionTest {
                 disallowAddUser = true,
                 disallowFactoryReset = true,
                 disallowInstallUnknownSources = true,
+                disallowConfigWifi = true,
+                disallowConfigMobileNetworks = true,
             ),
         )
         assertEquals(
@@ -22,6 +24,8 @@ class PolicyRestrictionTest {
                 UserManager.DISALLOW_ADD_USER to true,
                 UserManager.DISALLOW_FACTORY_RESET to true,
                 UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES to true,
+                UserManager.DISALLOW_CONFIG_WIFI to true,
+                UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS to true,
             ),
             updates,
         )
@@ -34,10 +38,12 @@ class PolicyRestrictionTest {
                 disallowAddUser = false,
                 disallowFactoryReset = false,
                 disallowInstallUnknownSources = false,
+                disallowConfigWifi = false,
+                disallowConfigMobileNetworks = false,
             ),
         )
         assertTrue(updates.all { !it.second })
-        assertEquals(3, updates.size)
+        assertEquals(5, updates.size)
     }
 
     @Test

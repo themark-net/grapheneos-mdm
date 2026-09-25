@@ -64,6 +64,16 @@
           "items": { "type": "string", "minLength": 1 },
           "description": "Full set of packages this agent should hide. Omit to leave hidden apps alone. The agent package is ignored."
         },
+        "locationEnabled": {
+          "type": "boolean",
+          "description": "true turns the location radio on and the next inventory includes a GPS fix. false turns the radio off and stops reporting. Omit to leave the radio alone. The agent still holds location permission either way."
+        },
+        "usbDataSignalingEnabled": {
+          "type": "boolean",
+          "description": "false disables USB data signaling (charge-only). Omit to leave it alone."
+        },
+        "disallowConfigWifi": { "type": "boolean" },
+        "disallowConfigMobileNetworks": { "type": "boolean" },
         "permissionGrants": {
           "type": "array",
           "description": "Full set of runtime permission overrides for other apps. Omit to leave grants alone. Entries that drop off are reset to default. The agent package is ignored.",

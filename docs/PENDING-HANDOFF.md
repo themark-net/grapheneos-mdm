@@ -1,12 +1,16 @@
 # Pending handoff
 
-Continuation note for the next harness. PR **#20** (Fixes #18) is merged. The open work is issue **#21**, runtime permission grants, on `feat/issue-21-permission-grants`.
+Continuation note for the next harness. Issue **#21** is merged. The open work is issue **#24**, lost-device GPS, on `feat/issue-24-location`.
 
-Written 2026-09-25. Issues #12, #13, #14, and #18 are closed.
+Written 2026-09-25. Issues #12, #13, #14, #18, and #21 are closed.
 
-## Open: issue #21
+## Open: issue #24
 
-`policyFlags.permissionGrants` is the full set of runtime permission overrides for other apps (`granted` / `denied` / `default`). Omit the list to leave grants alone. An entry that drops off is reset to `default`. A reset that fails stays recorded so the next check-in retries it. The agent package is ignored. `setPermissionGrantState` only accepts a runtime permission the target app requests; a rejection is logged and does not block the rest of the list.
+`policyFlags.locationEnabled` turns the location radio on and the next inventory includes a GNSS fix (`location`). The agent grants itself coarse, fine, and background location. While the radio is on it also grants GrapheneOS `android.permission.OTHER_SENSORS` when that permission exists. `usbDataSignalingEnabled`, `disallowConfigWifi`, and `disallowConfigMobileNetworks` are the USB and network controls that were missing from the client. Omit a flag to leave that setting alone.
+
+## Shipped: issue #21
+
+`policyFlags.permissionGrants` is the full set of runtime permission overrides for other apps (`granted` / `denied` / `default`). Omit the list to leave grants alone. An entry that drops off is reset to `default`. A reset that fails stays recorded so the next check-in retries it. The agent package is ignored.
 
 ## Shipped: PR #20 — Fixes #18
 
@@ -23,8 +27,8 @@ Omit `passwordComplexity`, `maximumTimeToLockMs`, `suspendedPackages`, or `hidde
 | | |
 | --- | --- |
 | Branch | `main` |
-| SHA | `00283d27b036a5c531f00063225948e6364ad0aa` |
-| Subject | feat(mdm): password rule, hide/suspend, uninstall agent installs (#20) |
+| SHA | `03e0743` |
+| Subject | docs: AGENTS.md Testing standing rule (Trophy / no tautology) |
 
 ## 2. What shipped
 
