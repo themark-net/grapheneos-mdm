@@ -140,14 +140,20 @@ class CheckInHandler(BaseHTTPRequestHandler):
         device_id = inventory.get("deviceId") or "unknown"
         subject = self._client_subject()
         desired = self.desired
+        challenge = base64.b64encode(os.urandom(32)).decode("ascii")
+        attestation_status = "unchecked"
         if self.fleet is not None:
             self.fleet.record_checkin(device_id, subject, inventory)
+            observed = self.fleet.observe_attestation(device_id, inventory)
+            attestation_status = observed["status"] or "none"
             desired = self.fleet.desired_for(device_id, self.desired)
+            challenge = self.fleet.issue_challenge(device_id)
         self.log_message(
-            "check-in deviceId=%s packages=%s client=%s",
+            "check-in deviceId=%s packages=%s client=%s attestation=%s",
             device_id,
             len(inventory.get("installedPackages") or []),
             subject,
+            attestation_status,
         )
 
         response: dict[str, Any] = {
@@ -155,7 +161,7 @@ class CheckInHandler(BaseHTTPRequestHandler):
             "status": "ok",
             "desiredState": desired,
             "message": f"lab check-in accepted for {device_id}",
-            "attestationChallenge": base64.b64encode(os.urandom(32)).decode("ascii"),
+            "attestationChallenge": challenge,
         }
         if self.issue_tokens:
             exp = datetime.now(timezone.utc) + timedelta(hours=1)

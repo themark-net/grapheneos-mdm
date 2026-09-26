@@ -61,6 +61,50 @@ class FleetStoreTest(unittest.TestCase):
         self.assertFalse(self.store.clear_desired("pixel-a"))
         self.assertIs(self.store.desired_for("pixel-a", default), default)
 
+    def test_group_desired_is_between_override_and_default(self) -> None:
+        default = {
+            "schemaVersion": 1,
+            "requiredPackages": [{"packageName": "default"}],
+            "policyFlags": {},
+        }
+        group = {
+            "schemaVersion": 1,
+            "requiredPackages": [{"packageName": "from-group"}],
+            "policyFlags": {},
+        }
+        device = {
+            "schemaVersion": 1,
+            "requiredPackages": [{"packageName": "from-device"}],
+            "policyFlags": {},
+        }
+        self.store.set_group_desired("pixels", group)
+        self.store.set_group("pixel-a", "pixels")
+        self.assertEqual(
+            self.store.desired_for("pixel-a", default)["requiredPackages"][0]["packageName"],
+            "from-group",
+        )
+        self.assertEqual(
+            self.store.desired_for("pixel-b", default)["requiredPackages"][0]["packageName"],
+            "default",
+        )
+        self.store.set_desired("pixel-a", device)
+        self.assertEqual(
+            self.store.desired_for("pixel-a", default)["requiredPackages"][0]["packageName"],
+            "from-device",
+        )
+        self.store.clear_desired("pixel-a")
+        self.assertEqual(
+            self.store.desired_for("pixel-a", default)["requiredPackages"][0]["packageName"],
+            "from-group",
+        )
+
+    def test_missing_attestation_after_a_challenge(self) -> None:
+        inventory = {"deviceId": "pixel-a", "attestation": {"format": "none"}}
+        self.store.record_checkin("pixel-a", "cn", inventory)
+        self.assertEqual(self.store.observe_attestation("pixel-a", inventory)["status"], "none")
+        self.store.issue_challenge("pixel-a")
+        self.assertEqual(self.store.observe_attestation("pixel-a", inventory)["status"], "missing")
+
     def test_set_desired_rejects_bad_shape(self) -> None:
         with self.assertRaises(ValueError):
             self.store.set_desired("pixel-a", {"schemaVersion": 2})

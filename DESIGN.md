@@ -56,8 +56,10 @@ Operator-facing steps, QR investigation, golden-image notes, and safety: **[docs
 
 **Lab (in-repo):** [`server/lab_checkin.py`](server/lab_checkin.py) - thin mTLS
 `POST /v1/checkin` stub that returns desired-state JSON for spare-device loops.
-Optional `--db` sqlite keeps the last inventory per device and a per-device
-desired-state override (otherwise every device gets the default file).
+Optional `--db` sqlite keeps the last inventory per device, a per-device
+desired-state override, and a group desired state (device override, else
+group, else the default file). A stored attestation challenge is checked
+against the next keymint certificate chain.
 See [docs/MTLS.md](docs/MTLS.md).
 
 **Production (still external):** a FastAPI / Go control plane that:
