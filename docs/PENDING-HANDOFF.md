@@ -1,8 +1,25 @@
 # Pending handoff
 
-Continuation note for the next harness. Issue **#26** is merged. The open server work is issue **#28** on `feat/issue-28-fleet-groups`: group desired state and a check of the key attestation certificate. Issue **#8** stays open because stock GrapheneOS still has no 6-tap wizard.
+Continuation note for the next harness. Issue **#28** is merged. Issue **#8** stays open because stock GrapheneOS still has no 6-tap wizard. There is no open client or server feature work on this tip beyond that park.
 
-Written 2026-09-25. Issues #12, #13, #14, #18, #21, #24, and #26 are closed.
+Written 2026-09-25. Issues #12, #13, #14, #18, #21, #24, #26, and #28 are closed.
+
+## Shipped: issue #28 — PR #29
+
+Squash `5dc98c188cc9f06d5f828e497cb1b0dc72a6202d` (was head `b333ff6`).
+
+With `--db`, desired state for a device is its own override, else its group's desired state, else the `--desired` file.
+
+`fleet_store.py` adds `set-group`, `clear-group`, `set-group-desired`, `clear-group-desired`, and `list-groups`. `list` and `show` include the group and the attestation status.
+
+Each check-in response still carries `attestationChallenge`, and that nonce is stored for the device. On the next inventory:
+
+- `format=none` and no prior challenge is `none`.
+- `format=none` after a challenge was issued is `missing`.
+- `keymint` must carry that challenge in the attestation extension and chain to a vendored Google attestation root. Expiry is not checked, because factory attestation keys that chain to that root stay trusted after `notAfter`.
+- Status `ok` also requires `verifiedBootState` `Verified`. Other boot states are `boot_unverified`. A bad challenge is `challenge_mismatch`. A chain that does not sign to the Google root is `chain_invalid`.
+
+The check-in still returns desired state when attestation fails. The result is on the device row. This PR does not change the agent.
 
 ## Shipped: issue #26 — PR #27
 
@@ -41,12 +58,12 @@ Omit `passwordComplexity`, `maximumTimeToLockMs`, `suspendedPackages`, or `hidde
 | | |
 | --- | --- |
 | Branch | `main` |
-| SHA | `cb09cfb` |
-| Subject | Attestation, preferred activities, profiles, updater check, QR handlers (#27) |
+| SHA | `5dc98c1` |
+| Subject | Fleet groups and key-attestation check (#29) |
 
 ## 2. What shipped
 
-Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24/#26.
+Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24/#26/#28.
 
 ### PR #17 — clear user restrictions — Fixes #14
 
@@ -77,6 +94,10 @@ Squash `fba9f9f87089e0ede86b48390cb97910cf6c55d2`.
 ### PR #27 — attestation / preferred activities / profiles / updater / QR — Fixes #26
 
 Squash `cb09cfb9fdb8604772bbae19abd836a5c569a04c`.
+
+### PR #29 — fleet groups + key-attestation check — Fixes #28
+
+Squash `5dc98c188cc9f06d5f828e497cb1b0dc72a6202d`.
 
 Earlier commits still on this tip, outside this stack: WorkManager scheduling (#11, issue #5), desired-apps enforce (#10, issue #4), mTLS check-in (#9, issue #3), and the enrollment guide (#7).
 
