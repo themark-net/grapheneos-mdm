@@ -15,11 +15,15 @@ python3 lab_checkin.py --certs lab-certs --port 8443 \
 ```
 
 `--db` is optional. Without it, every device receives the `--desired` file and
-inventory is only logged. With it, check-ins are stored and a per-device
-override replaces that file for one device id:
+inventory is only logged. With it, check-ins are stored. Desired state for a
+device is its own override, else its group's desired state, else the
+`--desired` file. The response challenge is remembered and checked against
+the next inventory's key attestation.
 
 ```bash
 python3 fleet_store.py --db fleet.sqlite list
+python3 fleet_store.py --db fleet.sqlite set-group-desired pixels desired-state.example.json
+python3 fleet_store.py --db fleet.sqlite set-group pixel-7 pixels
 python3 fleet_store.py --db fleet.sqlite set-desired pixel-7 desired-state.example.json
 python3 fleet_store.py --db fleet.sqlite clear-desired pixel-7
 ```

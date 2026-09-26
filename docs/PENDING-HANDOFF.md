@@ -1,6 +1,6 @@
 # Pending handoff
 
-Continuation note for the next harness. Issue **#26** is merged. Issue **#8** stays open because stock GrapheneOS still has no 6-tap wizard. There is no open client feature work on this tip beyond that park.
+Continuation note for the next harness. Issue **#26** is merged. The open server work is issue **#28** on `feat/issue-28-fleet-groups`: group desired state and a check of the key attestation certificate. Issue **#8** stays open because stock GrapheneOS still has no 6-tap wizard.
 
 Written 2026-09-25. Issues #12, #13, #14, #18, #21, #24, and #26 are closed.
 
