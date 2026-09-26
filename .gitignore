@@ -24,6 +24,7 @@ server/lab-certs/
 *.p12
 *.pem
 !docs/**/*.pem.example
+!server/attestation-roots.pem
 
 # Gradle wrapper jar is committed; local caches are not
 .gradle/
