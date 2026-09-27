@@ -10,6 +10,7 @@ import android.os.Bundle
 class AdminPolicyComplianceActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applyProvisioningExtras(this, intent)
         setResult(RESULT_OK)
         finish()
     }

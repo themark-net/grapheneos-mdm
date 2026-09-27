@@ -7,7 +7,7 @@ This document is the enrollment guide for **this** agent:
 - Declared in `app/src/main/AndroidManifest.xml` (`android:exported="true"`, `BIND_DEVICE_ADMIN`)
 
 **Supported path today:** ADB `dpm set-device-owner` on a clean Pixel running GrapheneOS.
-**Not supported today:** SetupWizard 6-tap QR / Managed Provisioning. Do not assume a QR code will enroll this app on stock GrapheneOS.
+**QR payload:** [section 2](#2-qr-provisioning) builds a standards provisioning QR and the agent applies `serverBaseUrl` from it. Stock GrapheneOS SetupWizard still does not open a scanner.
 
 Read the [safety notes](#safety-notes-read-before-you-set-device-owner) before the last ADB command.
 
@@ -100,51 +100,47 @@ This is **not** a reliable path for a release (non-`testOnly`) Device Owner. On 
 
 ---
 
-## 2. QR / 6-tap flow — investigation (does **not** work on stock GrapheneOS)
+## 2. QR provisioning
 
-Stock GrapheneOS SetupWizard2 does **not** implement AOSP’s hidden 6-tap QR enrollment. Tapping the welcome screen six times will not open a provisioning scanner. That is an upstream gap, not a bug in this agent.
+The agent side is ready. Stock GrapheneOS is not.
 
-### Upstream status (as of 2026-08-23)
+Checked 2026-09-27 against [SetupWizard2 branch 17](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/tree/17) (same commit as `16-qpr2`). `WelcomeActivity` has no tap counter and no call into ManagedProvisioning. Six taps on the welcome screen do nothing. [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40) is still open. This app cannot add that scanner.
 
-GrapheneOS maintainers have said MDM QR setup needs to live in [SetupWizard2](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2). Relevant PRs:
+When a wizard does launch ManagedProvisioning, this DPC:
 
-- [PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40) — Headwind-origin QR provisioning, still open; GrapheneOS noted it needs major cleanup and a current-branch retarget (15-qpr2 branch deletion closed it temporarily; it was reopened against 16-qpr2 with merge conflicts remaining).
-- [PR #48](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/48) — 16-qpr2 port; **closed** (not merged). Maintainers stated they will handle this task in-tree rather than accept that contribution.
+- answers `GET_PROVISIONING_MODE` with fully managed device
+- answers `ADMIN_POLICY_COMPLIANCE` with success
+- reads `serverBaseUrl` from `PROVISIONING_ADMIN_EXTRAS_BUNDLE` and saves it as the check-in base URL
 
-Until a SetupWizard2 change **ships in a GrapheneOS release**, a custom DPC cannot make 6-tap work by changing only this app.
+### 2.1 Build the QR
 
-### Could this DPC use QR once a GrapheneOS PR lands?
+The download URL must be **https** and signed by a CA the phone already trusts during setup. The lab CA from `gen-lab-certs.sh` is not in that trust store, so a self-signed `--publish-port` URL will fail in the wizard. Put the APK behind a certificate the device trusts (a public host, or a tunnel in front of the publish port), and point `--server-url` at the mTLS check-in origin the agent should call after it is device owner.
 
-**Probably yes as a Device Owner DPC, but not with the code as it exists today.**
-
-AOSP QR provisioning (when the wizard actually launches it) typically:
-
-1. User taps the welcome screen 6 times → scanner.
-2. QR JSON names the DPC component, HTTPS APK URL, and signature checksum.
-3. The wizard downloads the APK and starts `ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE`.
-4. The DPC **must** handle `DevicePolicyManager.ACTION_GET_PROVISIONING_MODE` and `DevicePolicyManager.ACTION_ADMIN_POLICY_COMPLIANCE`. If those activities are missing, provisioning **fails** on modern Android.
-
-This repo today:
-
-- Receiver is correctly exported for `DEVICE_ADMIN_ENABLED` / `PROFILE_PROVISIONING_COMPLETE` / `DEVICE_OWNER_CHANGED`.
-- `onProfileProvisioningComplete` schedules WorkManager check-ins (QR path still incomplete on stock GrapheneOS).
-- `GetProvisioningModeActivity` answers `ACTION_GET_PROVISIONING_MODE` with fully-managed mode when the wizard allows it.
-- `AdminPolicyComplianceActivity` answers `ACTION_ADMIN_POLICY_COMPLIANCE` with `RESULT_OK`.
-
-Those handlers are necessary once a wizard exists. They do not make 6-tap work on stock GrapheneOS today. After a release ships Managed Provisioning, a QR can name `net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver`.
-
-Illustrative QR JSON (do not treat as a working GrapheneOS payload today):
-
-```json
-{
-  "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": "net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver",
-  "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION": "https://example.invalid/grapheneos-mdm.apk",
-  "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM": "REPLACE_WITH_SHA256_OF_SIGNING_CERT_BYTES",
-  "android.app.extra.PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED": true
-}
+```bash
+./gradlew :app:assembleDebug
+python3 server/provisioning_qr.py \
+  --apk app/build/outputs/apk/debug/app-debug.apk \
+  --apk-url https://YOUR_HOST/dpc.apk \
+  --server-url https://YOUR_CHECKIN_HOST:8443 \
+  --wifi-ssid YOUR_SSID --wifi-password YOUR_PASSWORD \
+  --out provisioning.json --png provisioning.png
 ```
 
-Checksum and extras must match AOSP’s current QR spec when we implement this. Do not print this QR expecting stock GrapheneOS to honor it.
+`--png` needs `qrencode`. Without it, the JSON is still written. Display `provisioning.png` on another screen.
+
+Optional lab download port, still using the lab certificate (wizard will reject it unless something else terminates TLS):
+
+```bash
+python3 server/lab_checkin.py --certs server/lab-certs --publish-apk app/build/outputs/apk/debug/app-debug.apk --publish-port 8444
+```
+
+That serves `https://HOST:8444/dpc.apk` with no client certificate. Check-in on 8443 stays mTLS.
+
+### 2.2 What you can test on a stock GrapheneOS phone today
+
+Factory-reset, finish SetupWizard with **no accounts**, then use section 1 (`adb install` and `dpm set-device-owner`). Set the server URL in the app or in `SecureConfigStore` the same way a QR extra would. Do not factory-reset expecting six taps to open a camera.
+
+On a phone whose setup wizard does scan provisioning QR codes (stock Pixel OS, or a GrapheneOS build with PR #40), scan `provisioning.png` from the welcome screen before any account exists. The wizard downloads the APK, checks the signature checksum, and this agent becomes device owner with `serverBaseUrl` already set.
 
 ---
 

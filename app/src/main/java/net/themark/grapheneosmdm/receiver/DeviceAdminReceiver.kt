@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import net.themark.grapheneosmdm.provision.applyProvisioningExtras
 import net.themark.grapheneosmdm.service.CheckInScheduler
 
 /**
@@ -35,9 +36,7 @@ class DeviceAdminReceiver : DeviceAdminReceiver() {
     override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
         super.onProfileProvisioningComplete(context, intent)
         Log.i(TAG, "Profile provisioning complete — becoming Device Owner")
-        // QR / managed provisioning is not available on stock GrapheneOS SetupWizard yet.
-        // When it is, this callback is not enough: the DPC also needs GET_PROVISIONING_MODE
-        // and ADMIN_POLICY_COMPLIANCE activities (see docs/ENROLLMENT.md).
+        applyProvisioningExtras(context, intent)
         scheduleCheckIns(context, reason = "provisioning_complete")
     }
 

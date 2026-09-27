@@ -8,6 +8,9 @@ GET  /healthz          - liveness.
 Optional --db sqlite records each device's last inventory and serves a
 per-device desired-state override when one has been set (see fleet_store.py).
 
+Optional --publish-apk / --publish-port serves that APK at https://HOST:PORT/dpc.apk
+with no client certificate, for a provisioning QR download. Check-in stays mTLS.
+
 Usage:
   ./gen-lab-certs.sh
   python3 lab_checkin.py --certs ./lab-certs --port 8443 \\
@@ -27,6 +30,7 @@ import json
 import os
 import ssl
 import sys
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -195,6 +199,40 @@ def build_ssl_context(certs: Path) -> ssl.SSLContext:
     return ctx
 
 
+class PublishHandler(BaseHTTPRequestHandler):
+    """Serves one APK at /dpc.apk. No client certificate."""
+
+    server_version = "GrapheneOsMdmPublish/0.1"
+    apk_path: Path | None = None
+
+    def do_GET(self) -> None:  # noqa: N802
+        path = self.path.split("?", 1)[0]
+        apk = self.apk_path
+        if path != "/dpc.apk" or apk is None or not apk.is_file():
+            self.send_error(404)
+            return
+        data = apk.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/vnd.android.package-archive")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        sys.stderr.write("[publish] " + (fmt % args) + "\n")
+
+
+def build_publish_context(certs: Path) -> ssl.SSLContext:
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.verify_mode = ssl.CERT_NONE
+    ctx.load_cert_chain(
+        certfile=str(certs / "server.pem"),
+        keyfile=str(certs / "server-key.pem"),
+    )
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    return ctx
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -212,6 +250,8 @@ def main(argv: list[str] | None = None) -> int:
         help="sqlite path; record inventory and apply per-device desired-state overrides",
     )
     parser.add_argument("--no-tokens", action="store_true")
+    parser.add_argument("--publish-apk", default=None, help="APK served at /dpc.apk without client auth")
+    parser.add_argument("--publish-port", type=int, default=8444)
     args = parser.parse_args(argv)
 
     certs = Path(args.certs or __import__("os").environ.get("MDM_LAB_CERTS", "lab-certs"))
@@ -229,6 +269,21 @@ def main(argv: list[str] | None = None) -> int:
     CheckInHandler.catalog_dir = catalog if catalog.is_dir() else None
     db_path = args.db or __import__("os").environ.get("MDM_DB")
     CheckInHandler.fleet = FleetStore(db_path) if db_path else None
+
+    publish = None
+    if args.publish_apk:
+        apk = Path(args.publish_apk)
+        if not apk.is_file():
+            raise SystemExit(f"missing --publish-apk {apk}")
+        PublishHandler.apk_path = apk
+        publish = ThreadingHTTPServer((args.host, args.publish_port), PublishHandler)
+        publish.socket = build_publish_context(certs).wrap_socket(publish.socket, server_side=True)
+        threading.Thread(target=publish.serve_forever, daemon=True).start()
+        print(
+            f"provisioning APK at https://{args.host}:{args.publish_port}/dpc.apk "
+            f"(no client certificate, file={apk})",
+            flush=True,
+        )
 
     httpd = ThreadingHTTPServer((args.host, args.port), CheckInHandler)
     httpd.socket = build_ssl_context(certs).wrap_socket(httpd.socket, server_side=True)
