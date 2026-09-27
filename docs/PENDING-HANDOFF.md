@@ -1,14 +1,16 @@
 # Pending handoff
 
-Continuation note for the next harness. Issue **#32** is merged (PR #33). Open work is the localhost fleet operator page on `feat/fleet-ui` (PR #34). Issue **#8** stays closed (do not reopen). Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner — upstream gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
+Continuation note for the next harness. PR **#34** (localhost fleet operator page) is merged. Issue **#8** stays closed (do not reopen). Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner — upstream gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
 
-Written 2026-09-27. Issues #12, #13, #14, #18, #21, #24, #26, #28, #30, and #32 are closed. #8 stays closed.
+Written 2026-09-27. Issues #12, #13, #14, #18, #21, #24, #26, #28, #30, and #32 are closed. PR #34 is closed/merged. #8 stays closed.
 
-## Open: localhost fleet operator page — PR #34
+## Shipped: localhost fleet operator page — PR #34
+
+Squash `49a16c82964e4f35fdffd5c3cb7545728cdaa5cd` (was head `8277328`).
 
 `server/ui_server.py` serves a page on 127.0.0.1:8787 for the lab sqlite file. It lists devices and groups, assigns a group, and edits desired state. `FleetStore.get_group` backs the group detail. Check-in stays on the mutual-TLS port. The page refuses to bind outside localhost.
 
-Wipe is a Danger-zone control, not a JSON note. **Wipe device…** and any Save that would persist `commands` with `type: "wipe"` open a type-to-confirm modal (device id, or group name plus the member list). Cancel writes nothing. After a successful queue the status strip says "Wipe queued — runs on next check-in." The page does not report the device as wiped. Delete group asks for the group name. Design pack: [docs/design/](design/).
+Wipe is a Danger-zone control, not a JSON note. **Wipe device…** and any Save that would persist `commands` with `type: "wipe"` open a type-to-confirm modal (device id, or group name plus the member list). Cancel writes nothing. After a successful queue the status strip says "Wipe queued — runs on next check-in." The page does not report the device as wiped. Delete group asks for the group name. Design pack: [docs/design/](design/) (`README.md` + `10`–`14`).
 
 An empty database shows empty-state copy ("No phone has checked in yet"). This slice does not insert a sample device.
 
@@ -97,12 +99,12 @@ Omit `passwordComplexity`, `maximumTimeToLockMs`, `suspendedPackages`, or `hidde
 | | |
 | --- | --- |
 | Branch | `main` |
-| SHA | `47523f9` |
-| Subject | Apply Ansible group_vars onto fleet groups (#33) |
+| SHA | `49a16c8` |
+| Subject | Localhost fleet operator page (#34) |
 
 ## 2. What shipped
 
-Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24/#26/#28/#30/#32.
+Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24/#26/#28/#30/#32/#34.
 
 ### PR #17 — clear user restrictions — Fixes #14
 
@@ -146,11 +148,15 @@ Squash `dbaa2d05e1b89db5a11679678e11d4da6cde4ff0`.
 
 Squash `47523f98e81265603b095832891a7102262d128c`.
 
+### PR #34 — localhost fleet operator page
+
+Squash `49a16c82964e4f35fdffd5c3cb7545728cdaa5cd`.
+
 Earlier commits still on this tip, outside this stack: WorkManager scheduling (#11, issue #5), desired-apps enforce (#10, issue #4), mTLS check-in (#9, issue #3), and the enrollment guide (#7).
 
 ## 3. Open posture
 
-GrapheneOS MDM stays **software-only**. There is no device-demo park unless the founder says otherwise. Open work on `feat/fleet-ui` is the localhost fleet operator page (`server/ui_server.py` on 127.0.0.1:8787), including the wipe confirm gate in [docs/design/](design/). It reads the lab sqlite file and does not seed a sample device.
+GrapheneOS MDM stays **software-only**. There is no device-demo park unless the founder says otherwise. No open feature PR on this tip.
 
 Wizard gap (not a themark-net issue to reopen): stock GrapheneOS SetupWizard has no 6-tap scanner. Track upstream [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40). Issue #8 stays closed. Enrollment docs cover ADB Device Owner until that lands.
 
