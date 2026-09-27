@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GrapheneOS MDM fleet</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101114;
+      --panel: #181b20;
+      --panel-2: #20242b;
+      --line: #31363f;
+      --text: #e8eee9;
+      --muted: #8f9a93;
+      --ok: #8fceab;
+      --warn: #e3c27a;
+      --bad: #e39494;
+      --accent: #9fd7c2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: baseline;
+      padding: 20px 28px 8px;
+    }
+    h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: 0.01em; }
+    header p { margin: 0; color: var(--muted); font-size: 13px; }
+    nav { display: flex; gap: 8px; padding: 8px 28px 16px; }
+    button, select, textarea, input {
+      font: inherit;
+      color: var(--text);
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    button { padding: 7px 12px; cursor: pointer; }
+    button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+    button.danger { color: var(--bad); }
+    main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 0 28px 32px; }
+    @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .list { padding: 8px; }
+    .row {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: grid;
+      gap: 2px;
+    }
+    .row:hover, .row.active { background: var(--panel-2); }
+    .row strong { font-family: ui-monospace, monospace; font-size: 13px; font-weight: 600; }
+    .meta { color: var(--muted); font-size: 12px; }
+    .detail { padding: 18px 20px 24px; }
+    .detail h2 { margin: 0 0 4px; font-size: 16px; font-family: ui-monospace, monospace; }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 16px; }
+    @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+    .kicker { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+    .field { display: grid; gap: 4px; margin: 0 0 10px; }
+    .field select, .field input { width: 100%; }
+    details { margin-top: 14px; }
+    summary { cursor: pointer; color: var(--muted); }
+    dl { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; margin: 14px 0; }
+    dt { color: var(--muted); }
+    dd { margin: 0; }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 1px 8px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+    }
+    .muted { color: var(--muted); }
+    .ok { color: var(--ok); border-color: #2f5b45; }
+    .warn { color: var(--warn); border-color: #6a5728; }
+    .bad { color: var(--bad); border-color: #6a3030; }
+    textarea.short { min-height: 72px; }
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      padding: 10px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .error, .status { font-size: 13px; min-height: 1.2em; margin: 8px 0 0; }
+    .error { color: var(--bad); }
+    .danger-zone { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .danger-zone h3 { color: var(--bad); margin: 0 0 8px; font-size: 14px; }
+    #modal[hidden] { display: none; }
+    #modal:not([hidden]) {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .modal-card {
+      width: min(480px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px 20px 20px;
+    }
+    .modal-card h2 { font-family: inherit; font-size: 18px; }
+    .modal-card label { display: block; margin-top: 8px; }
+    .modal-card input { width: 100%; margin: 6px 0 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-weight: 500; }
+    .empty { color: var(--muted); padding: 28px 16px; }
+    label { color: var(--muted); font-size: 13px; }
+    select, input[type="text"] { padding: 7px 10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>GrapheneOS MDM</h1>
+    <p>Left of a device is the last report. Right is the policy the next check-in applies.</p>
+  </header>
+  <nav>
+    <button id="tab-devices" type="button" aria-pressed="true">Devices</button>
+    <button id="tab-groups" type="button" aria-pressed="false">Groups</button>
+  </nav>
+  <main>
+    <section class="list" id="list"></section>
+    <section class="detail" id="detail"></section>
+  </main>
+  <div id="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h2 id="modal-title"></h2>
+      <p id="modal-copy"></p>
+      <dl id="modal-facts"></dl>
+      <label id="modal-label" for="modal-input"></label>
+      <input id="modal-input" type="text" autocomplete="off" spellcheck="false">
+      <div class="actions">
+        <button id="modal-cancel" type="button">Cancel</button>
+        <button id="modal-confirm" class="danger" type="button" disabled></button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const WIPE_QUEUED = "Wipe queued — runs on next check-in.";
+    const UNKNOWN_DEVICE = "Unknown device — not in this database.";
+    const listEl = document.getElementById("list");
+    const detailEl = document.getElementById("detail");
+    const tabDevices = document.getElementById("tab-devices");
+    const tabGroups = document.getElementById("tab-groups");
+    const modalEl = document.getElementById("modal");
+    let mode = "devices";
+    let selected = null;
+    let groups = [];
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
+      }[ch]));
+    }
+
+    function containsWipe(desired) {
+      const commands = desired && desired.commands;
+      if (!Array.isArray(commands)) return false;
+      return commands.some((command) => command && command.type === "wipe");
+    }
+
+    function pill(status) {
+      const value = status || "none";
+      const kind = value === "ok" ? "ok" : value === "none" || value === "missing" ? "muted" : "bad";
+      return `<span class="pill ${kind}">${value}</span>`;
+    }
+
+    async function api(path, options) {
+      const response = await fetch(path, options);
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(body.error || response.statusText);
+        error.status = response.status;
+        throw error;
+      }
+      return body;
+    }
+
+    function showError(err) {
+      const node = detailEl.querySelector(".error");
+      const text = "FAIL " + (err.message || String(err));
+      if (node) node.textContent = text;
+      else detailEl.innerHTML = `<p class="error">${esc(text)}</p>`;
+    }
+
+    function showStatus(text, kind) {
+      const node = detailEl.querySelector(".status");
+      if (!node) return;
+      node.textContent = text || "";
+      node.className = "status" + (text && kind ? " " + kind : "");
+    }
+
+    function showStatusIfEmpty(text, kind) {
+      const node = detailEl.querySelector(".status");
+      if (!node || node.textContent) return;
+      showStatus(text, kind);
+    }
+
+    function closeModal() {
+      modalEl.hidden = true;
+      document.getElementById("modal-confirm").onclick = null;
+    }
+
+    function openModal(opts) {
+      document.getElementById("modal-title").textContent = opts.title;
+      document.getElementById("modal-copy").textContent = opts.copy;
+      document.getElementById("modal-facts").innerHTML = (opts.facts || []).map(
+        ([label, value]) => `<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`
+      ).join("");
+      document.getElementById("modal-label").textContent = opts.label;
+      const input = document.getElementById("modal-input");
+      const confirm = document.getElementById("modal-confirm");
+      input.value = "";
+      confirm.textContent = opts.confirmLabel;
+      confirm.disabled = true;
+      input.oninput = () => {
+        confirm.disabled = input.value !== opts.expect;
+      };
+      confirm.onclick = async () => {
+        if (input.value !== opts.expect) return;
+        const typed = input.value;
+        confirm.disabled = true;
+        try {
+          await opts.onConfirm(typed);
+          closeModal();
+        } catch (err) {
+          closeModal();
+          showError(err);
+        }
+      };
+      modalEl.hidden = false;
+      input.focus();
+    }
+
+    document.getElementById("modal-cancel").onclick = () => closeModal();
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !modalEl.hidden) closeModal();
+    });
+
+    function openDeviceWipeModal(device, onConfirm) {
+      const facts = [["Device", device.deviceId]];
+      if (device.group) facts.push(["Group", device.group]);
+      facts.push(["Source", device.desiredSource || ""]);
+      openModal({
+        title: "Confirm wipe",
+        copy: "This factory-resets the device on its next check-in. It cannot be undone from this page.",
+        facts,
+        label: "Type the device id to confirm:",
+        expect: device.deviceId,
+        confirmLabel: "Wipe on next check-in",
+        onConfirm,
+      });
+    }
+
+    function memberFact(members) {
+      if (!members.length) {
+        return "No devices assigned now — wipe runs when a device in this group checks in.";
+      }
+      return members.join(", ");
+    }
+
+    async function saveDeviceDesired(id, device, parsed) {
+      const send = async (typed) => {
+        const headers = { "Content-Type": "application/json" };
+        if (typed) headers["X-Confirm-Wipe"] = typed;
+        await api("/api/devices/" + encodeURIComponent(id) + "/desired", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(parsed),
+        });
+        await refresh();
+        await openDevice(id);
+        if (!containsWipe(parsed)) showStatusIfEmpty("Saved", "ok");
+      };
+      if (containsWipe(parsed)) {
+        openDeviceWipeModal(device, send);
+        return;
+      }
+      await send(null);
+    }
+
+    async function saveGroupDesired(name, parsed, members) {
+      const send = async (typed) => {
+        const headers = { "Content-Type": "application/json" };
+        if (typed) headers["X-Confirm-Wipe"] = typed;
+        await api("/api/groups/" + encodeURIComponent(name), {
+          method: "PUT",
+          headers,
+          body: JSON.stringify(parsed),
+        });
+        selected = name;
+        await refresh();
+        await openGroup(name);
+        showStatus(containsWipe(parsed) ? WIPE_QUEUED : "Saved", containsWipe(parsed) ? "warn" : "ok");
+      };
+      if (containsWipe(parsed)) {
+        openModal({
+          title: "Confirm wipe for group",
+          copy: "Saving this group queues a factory reset for every member on their next check-in.",
+          facts: [
+            ["Group", name],
+            ["Members", memberFact(members)],
+            ["Count", String(members.length)],
+          ],
+          label: "Type the group name to confirm:",
+          expect: name,
+          confirmLabel: "Wipe all members on check-in",
+          onConfirm: send,
+        });
+        return;
+      }
+      await send(null);
+    }
+
+    async function loadDevices() {
+      const data = await api("/api/devices");
+      groups = (await api("/api/groups")).groups;
+      if (!data.devices.length) {
+        listEl.innerHTML = `<p class="empty">No phone has checked in yet. The list fills after a mutual-TLS check-in against this database.</p>`;
+        if (!selected) {
+          detailEl.innerHTML = `<p class="empty">Create a group on the Groups tab if you want a shared desired state waiting for the first device.</p>`;
+        }
+        return;
+      }
+      listEl.innerHTML = data.devices.map((device) => `
+        <button class="row ${device.deviceId === selected ? "active" : ""}" type="button" data-id="${device.deviceId}">
+          <strong>${esc(device.deviceId)}</strong>
+          <span class="meta">${esc(device.group || "no group")} · ${device.packageCount} packages · ${pill(device.attestationStatus)}</span>
+          <span class="meta">${device.osVersion || "?"} · patch ${device.securityPatch || "?"} · ${device.lastCheckinAt}</span>
+        </button>`).join("");
+      listEl.querySelectorAll(".row").forEach((row) => {
+        row.addEventListener("click", () => openDevice(row.dataset.id));
+      });
+      if (!selected && data.devices[0]) await openDevice(data.devices[0].deviceId);
+    }
+
+    const POLICY_FLAGS = [
+      ["disallowAddUser", "Block adding users"],
+      ["disallowFactoryReset", "Block factory reset"],
+      ["disallowInstallUnknownSources", "Block unknown-source installs"],
+      ["cameraDisabled", "Camera disabled"],
+      ["locationEnabled", "Location radio"],
+      ["usbDataSignalingEnabled", "USB data signaling"],
+      ["disallowConfigWifi", "Block Wi-Fi configuration"],
+      ["disallowConfigMobileNetworks", "Block mobile-network configuration"],
+      ["disallowUserSwitch", "Block switching users"],
+    ];
+
+    function tri(name, label, value) {
+      const current = value === true ? "true" : value === false ? "false" : "";
+      return `<label class="field">${esc(label)}
+        <select data-flag="${name}">
+          <option value="" ${current === "" ? "selected" : ""}>Leave alone</option>
+          <option value="true" ${current === "true" ? "selected" : ""}>On</option>
+          <option value="false" ${current === "false" ? "selected" : ""}>Off</option>
+        </select></label>`;
+    }
+
+    function listField(id, label, values) {
+      const text = Array.isArray(values) ? values.join(", ") : "";
+      return `<label class="field">${esc(label)}
+        <input id="${id}" type="text" value="${esc(text)}" placeholder="Leave blank to leave the phone alone">
+      </label>`;
+    }
+
+    function readConfigured(base) {
+      const flags = Object.assign({}, (base.policyFlags || {}));
+      document.querySelectorAll("[data-flag]").forEach((el) => {
+        if (el.value === "") delete flags[el.dataset.flag];
+        else flags[el.dataset.flag] = el.value === "true";
+      });
+      const patch = document.getElementById("min-patch").value.trim();
+      if (patch) flags.minSecurityPatch = patch; else delete flags.minSecurityPatch;
+      const complexity = document.getElementById("password").value;
+      if (complexity) flags.passwordComplexity = complexity; else delete flags.passwordComplexity;
+      const lockMs = document.getElementById("lock-ms").value.trim();
+      if (lockMs) flags.maximumTimeToLockMs = Number(lockMs); else delete flags.maximumTimeToLockMs;
+      for (const key of ["suspendedPackages", "hiddenPackages", "lockTaskPackages"]) {
+        const raw = document.getElementById(key).value.trim();
+        if (!raw) delete flags[key];
+        else flags[key] = raw.split(",").map((part) => part.trim()).filter(Boolean);
+      }
+      const names = document.getElementById("required").value.split("\n").map((part) => part.trim()).filter(Boolean);
+      const previous = base.requiredPackages || [];
+      return {
+        schemaVersion: 1,
+        requiredPackages: names.map((name) => previous.find((pkg) => pkg.packageName === name) || { packageName: name }),
+        policyFlags: flags,
+        commands: base.commands || [],
+      };
+    }
+
+    async function openDevice(id) {
+      selected = id;
+      mode = "devices";
+      setTabs();
+      let device;
+      try {
+        device = await api("/api/devices/" + encodeURIComponent(id));
+      } catch (err) {
+        if (err.status === 404) {
+          detailEl.innerHTML = `<p class="error">${esc(UNKNOWN_DEVICE)}</p>`;
+        } else {
+          detailEl.innerHTML = `<p class="error">FAIL ${esc(err.message)}</p>`;
+        }
+        return;
+      }
+      const inventory = device.inventory || {};
+      const location = inventory.location;
+      const packages = inventory.installedPackages || [];
+      const installed = new Set(packages.map((pkg) => pkg.packageName));
+      const configured = device.desiredOverride || device.resolvedDesired || { policyFlags: {}, requiredPackages: [] };
+      const flags = configured.policyFlags || {};
+      const updater = inventory.osUpdater;
+      const groupOptions = [`<option value="">No group</option>`]
+        .concat(groups.map((group) => `<option value="${esc(group.name)}" ${group.name === device.group ? "selected" : ""}>${esc(group.name)}</option>`))
+        .join("");
+      const complexity = flags.passwordComplexity || "";
+      const requiredRows = (configured.requiredPackages || []).map((pkg) => {
+        const present = installed.has(pkg.packageName);
+        return `<tr><td>${esc(pkg.packageName)}</td><td>${present ? "Installed" : "Missing on last report"}</td></tr>`;
+      }).join("");
+      detailEl.innerHTML = `
+        <h2>${esc(device.deviceId)}</h2>
+        <p class="meta">Certificate ${esc(device.clientCn)} · last check-in ${esc(device.lastCheckinAt)} · configuration from ${esc(device.desiredSource)}</p>
+        <div class="split">
+          <div>
+            <p class="kicker">Reported</p>
+            <p class="meta">Read-only. This is the last inventory the phone sent. Nothing here changes the device.</p>
+            <dl>
+              <dt>Model</dt><dd>${esc(inventory.model || "not reported")}</dd>
+              <dt>OS</dt><dd>${esc(inventory.osVersion || "?")} · patch ${esc(inventory.securityPatch || "?")}</dd>
+              <dt>Patch meets policy</dt><dd>${inventory.securityPatchOk === true ? "yes" : inventory.securityPatchOk === false ? "no" : "not reported"}</dd>
+              <dt>Device owner</dt><dd>${inventory.isDeviceOwner === true ? "yes" : inventory.isDeviceOwner === false ? "no" : "not reported"}</dd>
+              <dt>Attestation</dt><dd>${pill(device.attestationStatus)} ${esc(device.verifiedBootState || inventory.attestation && inventory.attestation.verifiedBootState || "")}</dd>
+              <dt>Location</dt><dd>${location ? esc(location.latitude + ", " + location.longitude + " (" + (location.provider || "unknown") + ")") : "not reported"}</dd>
+              <dt>Users</dt><dd>${esc((inventory.users || []).map((user) => user.serial + (user.secondary ? " secondary" : "")).join(", ") || "not reported")}</dd>
+              <dt>OS updater</dt><dd>${updater ? esc((updater.installed ? "installed" : "not installed") + (updater.versionName ? " " + updater.versionName : "") + (updater.enabled === false ? ", disabled" : "")) : "not reported"}</dd>
+            </dl>
+            <h3>Installed packages</h3>
+            <table>
+              <thead><tr><th>Package</th><th>Version</th></tr></thead>
+              <tbody>${packages.map((pkg) => `<tr><td>${esc(pkg.packageName)}</td><td>${esc(pkg.versionName || "")}</td></tr>`).join("") || `<tr><td colspan="2">None reported</td></tr>`}</tbody>
+            </table>
+          </div>
+          <div>
+            <p class="kicker">Configured</p>
+            <p class="meta">Applied on the next check-in. Leave a control on “Leave alone” and that setting is not changed. Saving here writes a device override.</p>
+            <label class="field">Group
+              <span class="actions"><select id="group">${groupOptions}</select><button id="save-group" type="button">Save group</button></span>
+            </label>
+            ${POLICY_FLAGS.map(([name, label]) => tri(name, label, flags[name])).join("")}
+            <label class="field">Minimum security patch
+              <input id="min-patch" type="text" value="${esc(flags.minSecurityPatch || "")}" placeholder="YYYY-MM-DD, or blank to leave alone">
+            </label>
+            <label class="field">Password complexity
+              <select id="password">
+                <option value="" ${complexity === "" ? "selected" : ""}>Leave alone</option>
+                ${["none", "low", "medium", "high"].map((item) => `<option value="${item}" ${complexity === item ? "selected" : ""}>${item}</option>`).join("")}
+              </select>
+            </label>
+            <label class="field">Lock timeout (ms)
+              <input id="lock-ms" type="text" value="${esc(flags.maximumTimeToLockMs ?? "")}" placeholder="Blank leaves it alone. 0 clears the limit.">
+            </label>
+            ${listField("suspendedPackages", "Suspended packages", flags.suspendedPackages)}
+            ${listField("hiddenPackages", "Hidden packages", flags.hiddenPackages)}
+            ${listField("lockTaskPackages", "Lock-task packages", flags.lockTaskPackages)}
+            <label class="field">Required packages, one name per line
+              <textarea id="required" class="short" spellcheck="false">${esc((configured.requiredPackages || []).map((pkg) => pkg.packageName).join("\n"))}</textarea>
+            </label>
+            <h3>Required apps on last report</h3>
+            <table>
+              <thead><tr><th>Required</th><th>Last report</th></tr></thead>
+              <tbody>${requiredRows || `<tr><td colspan="2">No packages required</td></tr>`}</tbody>
+            </table>
+            <p class="meta">Queued commands: ${esc((configured.commands || []).map((cmd) => cmd.type).join(", ") || "none")}. Wipe is under Danger — or confirm if JSON includes wipe.</p>
+            <div class="actions">
+              <button id="save-desired" type="button">Save as device override</button>
+              <button id="clear-desired" class="danger" type="button">Clear override</button>
+            </div>
+            ${device.wipeRecover ? `<p class="status warn">${esc(device.wipeRecover)}</p>` : `<p class="status"></p>`}
+            <p class="error"></p>
+            <details>
+              <summary>Raw desired-state JSON</summary>
+              <textarea id="desired" spellcheck="false">${esc(JSON.stringify(configured, null, 2))}</textarea>
+              <div class="actions"><button id="save-json" type="button">Save raw JSON as override</button></div>
+            </details>
+            <div class="danger-zone">
+              <h3>Danger</h3>
+              <p class="meta">Factory-reset this device on next check-in.</p>
+              <button id="wipe-device" class="danger" type="button">Wipe device…</button>
+            </div>
+          </div>
+        </div>`;
+      document.getElementById("save-group").onclick = async () => {
+        try {
+          await api("/api/devices/" + encodeURIComponent(id) + "/group", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ group: document.getElementById("group").value || null }),
+          });
+          await refresh();
+          await openDevice(id);
+          showStatusIfEmpty("Saved", "ok");
+        } catch (err) { showError(err); }
+      };
+      document.getElementById("save-desired").onclick = async () => {
+        try {
+          await saveDeviceDesired(id, device, readConfigured(configured));
+        } catch (err) { showError(err); }
+      };
+      document.getElementById("save-json").onclick = async () => {
+        let parsed;
+        try {
+          parsed = JSON.parse(document.getElementById("desired").value);
+        } catch (err) {
+          showError(new Error("invalid JSON"));
+          return;
+        }
+        try {
+          await saveDeviceDesired(id, device, parsed);
+        } catch (err) { showError(err); }
+      };
+      document.getElementById("clear-desired").onclick = async () => {
+        try {
+          await api("/api/devices/" + encodeURIComponent(id) + "/desired", { method: "DELETE" });
+          await refresh();
+          await openDevice(id);
+          showStatusIfEmpty("Saved", "ok");
+        } catch (err) { showError(err); }
+      };
+      document.getElementById("wipe-device").onclick = () => {
+        openDeviceWipeModal(device, async (typed) => {
+          await api("/api/devices/" + encodeURIComponent(id) + "/wipe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Confirm-Wipe": typed },
+            body: "{}",
+          });
+          await refresh();
+          await openDevice(id);
+        });
+      };
+      await loadDevices();
+    }
+
+    async function loadGroups() {
+      groups = (await api("/api/groups")).groups;
+      listEl.innerHTML = groups.map((group) => `
+        <button class="row ${group.name === selected ? "active" : ""}" type="button" data-group="${group.name}">
+          <strong>${esc(group.name)}</strong>
+          <span class="meta">${group.deviceCount} devices · ${group.updatedAt}</span>
+        </button>`).join("") || `<p class="empty">No groups yet.</p>`;
+      listEl.querySelectorAll(".row").forEach((row) => {
+        row.addEventListener("click", () => openGroup(row.dataset.group));
+      });
+      if (!selected) {
+        detailEl.innerHTML = groupForm();
+        bindNewGroup();
+      }
+    }
+
+    function groupForm(existing) {
+      const name = existing ? existing.name : "";
+      const body = existing ? JSON.stringify(existing.desired, null, 2) : `{
+  "schemaVersion": 1,
+  "requiredPackages": [],
+  "policyFlags": {}
+}`;
+      const members = existing ? (existing.deviceIds || []) : [];
+      return `
+        <h2>${existing ? esc(name) : "New group"}</h2>
+        <p class="meta">${existing ? esc(members.join(", ") || "No devices assigned") : "Shared desired state for devices you assign on the Devices tab."}</p>
+        ${existing ? "" : `<div class="actions"><label>Name</label><input id="new-name" type="text" placeholder="pixels"></div>`}
+        <textarea id="group-json" spellcheck="false">${body.replace(/</g, "&lt;")}</textarea>
+        <div class="actions">
+          <button id="save-group-json" type="button">${existing ? "Save group" : "Create group"}</button>
+        </div>
+        <p class="status"></p>
+        <p class="error"></p>
+        ${existing ? `<div class="danger-zone">
+          <h3>Danger</h3>
+          <p class="meta">Members become ungrouped. Desired state for this group is removed.</p>
+          <button id="delete-group" class="danger" type="button">Delete group</button>
+        </div>` : ""}`;
+    }
+
+    function bindNewGroup() {
+      document.getElementById("save-group-json").onclick = async () => {
+        const name = document.getElementById("new-name").value.trim();
+        let parsed;
+        try {
+          parsed = JSON.parse(document.getElementById("group-json").value);
+        } catch (err) {
+          showError(new Error("invalid JSON"));
+          return;
+        }
+        if (!name) {
+          showError(new Error("group name is required"));
+          return;
+        }
+        try {
+          await saveGroupDesired(name, parsed, []);
+        } catch (err) { showError(err); }
+      };
+    }
+
+    async function openGroup(name) {
+      selected = name;
+      let group;
+      try {
+        group = await api("/api/groups/" + encodeURIComponent(name));
+      } catch (err) {
+        detailEl.innerHTML = `<p class="error">FAIL ${esc(err.message)}</p>`;
+        return;
+      }
+      detailEl.innerHTML = groupForm(group);
+      document.getElementById("save-group-json").onclick = async () => {
+        let parsed;
+        try {
+          parsed = JSON.parse(document.getElementById("group-json").value);
+        } catch (err) {
+          showError(new Error("invalid JSON"));
+          return;
+        }
+        try {
+          await saveGroupDesired(name, parsed, group.deviceIds || []);
+        } catch (err) { showError(err); }
+      };
+      document.getElementById("delete-group").onclick = () => {
+        openModal({
+          title: "Delete group " + name + "?",
+          copy: "Members become ungrouped. Desired state for this group is removed.",
+          facts: [["Group", name]],
+          label: "Type the group name to confirm:",
+          expect: name,
+          confirmLabel: "Delete group",
+          onConfirm: async (typed) => {
+            await api("/api/groups/" + encodeURIComponent(name), {
+              method: "DELETE",
+              headers: { "X-Confirm-Delete": typed },
+            });
+            selected = null;
+            await refresh();
+          },
+        });
+      };
+      await loadGroups();
+    }
+
+    function setTabs() {
+      tabDevices.setAttribute("aria-pressed", mode === "devices" ? "true" : "false");
+      tabGroups.setAttribute("aria-pressed", mode === "groups" ? "true" : "false");
+    }
+
+    async function refresh() {
+      if (mode === "devices") await loadDevices();
+      else await loadGroups();
+    }
+
+    tabDevices.onclick = async () => { mode = "devices"; selected = null; setTabs(); await loadDevices(); };
+    tabGroups.onclick = async () => { mode = "groups"; selected = null; setTabs(); await loadGroups(); };
+    loadDevices().catch((err) => { detailEl.innerHTML = `<p class="error">FAIL ${esc(err.message)}</p>`; });
+  </script>
+</body>
+</html>

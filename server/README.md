@@ -30,6 +30,14 @@ python3 fleet_store.py --db fleet.sqlite clear-desired pixel-7
 
 Ansible `group_vars/<group>.json` is that same desired-state document. Apply an inventory with `python3 ansible_sync.py` (see `ansible/README.md`).
 
+The operator page is local only:
+
+```bash
+python3 ui_server.py --db fleet.sqlite --desired desired-state.example.json
+```
+
+Open http://127.0.0.1:8787/. It reads the same sqlite file. It does not replace the mTLS check-in port. Wipe device… asks for the device id before queueing a wipe; saving JSON that contains a wipe command asks the same way. The page then says the wipe runs on the next check-in. See `docs/design/`.
+
 Smoke with client cert:
 
 ```bash

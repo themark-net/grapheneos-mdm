@@ -204,6 +204,28 @@ class FleetStore:
             for row in rows
         ]
 
+    def get_group(self, name: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT name, desired_json, updated_at FROM groups WHERE name = ?",
+                (name,),
+            ).fetchone()
+            if row is None:
+                return None
+            devices = [
+                item[0]
+                for item in self._conn.execute(
+                    "SELECT device_id FROM device_groups WHERE group_name = ? ORDER BY device_id",
+                    (name,),
+                )
+            ]
+        return {
+            "name": row["name"],
+            "updatedAt": row["updated_at"],
+            "desired": json.loads(row["desired_json"]),
+            "deviceIds": devices,
+        }
+
     def set_desired(self, device_id: str, desired: dict[str, Any]) -> None:
         if not device_id:
             raise ValueError("device id is required")
@@ -270,10 +292,12 @@ class FleetStore:
                 """
                 SELECT d.device_id, d.client_cn, d.last_checkin_at, d.inventory_json,
                        d.attestation_status, d.verified_boot_state,
-                       o.desired_json, g.group_name
+                       o.desired_json, o.updated_at AS desired_updated_at,
+                       g.group_name, grp.updated_at AS group_updated_at
                 FROM devices d
                 LEFT JOIN desired_overrides o ON o.device_id = d.device_id
                 LEFT JOIN device_groups g ON g.device_id = d.device_id
+                LEFT JOIN groups grp ON grp.name = g.group_name
                 WHERE d.device_id = ?
                 """,
                 (device_id,),
@@ -287,6 +311,8 @@ class FleetStore:
             "lastCheckinAt": row["last_checkin_at"],
             "inventory": json.loads(row["inventory_json"]),
             "desiredOverride": override,
+            "desiredUpdatedAt": row["desired_updated_at"],
+            "groupUpdatedAt": row["group_updated_at"],
             "group": row["group_name"],
             "attestationStatus": row["attestation_status"],
             "verifiedBootState": row["verified_boot_state"],

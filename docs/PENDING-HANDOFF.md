@@ -1,8 +1,18 @@
 # Pending handoff
 
-Continuation note for the next harness. Issue **#32** is merged. Issue **#8** stays closed (do not reopen). Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner — upstream gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
+Continuation note for the next harness. Issue **#32** is merged (PR #33). Open work is the localhost fleet operator page on `feat/fleet-ui` (PR #34). Issue **#8** stays closed (do not reopen). Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner — upstream gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
 
 Written 2026-09-27. Issues #12, #13, #14, #18, #21, #24, #26, #28, #30, and #32 are closed. #8 stays closed.
+
+## Open: localhost fleet operator page — PR #34
+
+`server/ui_server.py` serves a page on 127.0.0.1:8787 for the lab sqlite file. It lists devices and groups, assigns a group, and edits desired state. `FleetStore.get_group` backs the group detail. Check-in stays on the mutual-TLS port. The page refuses to bind outside localhost.
+
+Wipe is a Danger-zone control, not a JSON note. **Wipe device…** and any Save that would persist `commands` with `type: "wipe"` open a type-to-confirm modal (device id, or group name plus the member list). Cancel writes nothing. After a successful queue the status strip says "Wipe queued — runs on next check-in." The page does not report the device as wiped. Delete group asks for the group name. Design pack: [docs/design/](design/).
+
+An empty database shows empty-state copy ("No phone has checked in yet"). This slice does not insert a sample device.
+
+Software-only. No device-demo.
 
 ## Shipped: issue #32 — PR #33
 
@@ -140,7 +150,7 @@ Earlier commits still on this tip, outside this stack: WorkManager scheduling (#
 
 ## 3. Open posture
 
-GrapheneOS MDM stays **software-only**. There is no device-demo park unless the founder says otherwise.
+GrapheneOS MDM stays **software-only**. There is no device-demo park unless the founder says otherwise. Open work on `feat/fleet-ui` is the localhost fleet operator page (`server/ui_server.py` on 127.0.0.1:8787), including the wipe confirm gate in [docs/design/](design/). It reads the lab sqlite file and does not seed a sample device.
 
 Wizard gap (not a themark-net issue to reopen): stock GrapheneOS SetupWizard has no 6-tap scanner. Track upstream [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40). Issue #8 stays closed. Enrollment docs cover ADB Device Owner until that lands.
 
@@ -154,14 +164,15 @@ Wizard gap (not a themark-net issue to reopen): stock GrapheneOS SetupWizard has
 - [docs/ENROLLMENT.md](ENROLLMENT.md) — ADB Device Owner enrollment on a clean Pixel, including safety notes. QR / Managed Provisioning needs a wizard that launches it.
 - [docs/MTLS.md](MTLS.md) — mTLS check-in, lab `--db`, and fleet CA alignment.
 - [docs/SCHEDULING.md](SCHEDULING.md) — WorkManager periodic check-in and the force / `checkin_now` path.
-- [DESIGN.md](../DESIGN.md) — architecture. Lab `--db` and `minSecurityPatch` reporting are already noted there.
-- [server/README.md](../server/README.md) — lab check-in quick start and `fleet_store.py`.
+- [docs/design/](design/) — fleet operator journey, wireframes, and the wipe-gate handoff.
+- [DESIGN.md](../DESIGN.md) — architecture. Lab `--db`, the localhost operator page, and `minSecurityPatch` reporting are already noted there.
+- [server/README.md](../server/README.md) — lab check-in quick start, `fleet_store.py`, and the localhost operator page.
 - [protocol/](../protocol/) — desired-state and inventory JSON schemas.
 
 ## 6. Dogfood
 
 Use the procedures already written in those docs. This note does not add device steps.
 
-- Host lab loop: [server/README.md](../server/README.md) (`gen-lab-certs.sh`, `lab_checkin.py --db`, `fleet_store.py`, curl smoke against `/v1/checkin`).
+- Host lab loop: [server/README.md](../server/README.md) (`gen-lab-certs.sh`, `lab_checkin.py --db`, `fleet_store.py`, `ui_server.py` on 127.0.0.1:8787, curl smoke against `/v1/checkin`).
 - Agent certificates and server base URL: [docs/MTLS.md](MTLS.md).
 - Enrollment on a device that is already in an approved lab: [docs/ENROLLMENT.md](ENROLLMENT.md) only.
