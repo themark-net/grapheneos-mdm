@@ -82,7 +82,7 @@ Later: Ansible modules or a Terraform-like provider that talks to the same API.
 
 ## 7. Open Questions / TODOs
 
-- Exact policy schema (YAML/JSON) that maps cleanly to Ansible inventory / group_vars.
+- Policy schema for Ansible: `ansible/group_vars/<group>.json` is the desired-state document. `server/ansible_sync.py` loads `hosts.ini` into the lab group store. A device override still wins. Host vars are not a second policy file.
 - How to handle GrapheneOS multi-user / profiles.
 - Whether to implement a minimal launcher or stay invisible.
 - OTA / OS update enforcement: desired state may set `minSecurityPatch`. The agent reports `securityPatchOk` on the next inventory and does not drive the GrapheneOS updater or wipe the device.

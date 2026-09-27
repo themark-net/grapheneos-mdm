@@ -1,6 +1,6 @@
 # Pending handoff
 
-Continuation note for the next harness. Issue **#30** is merged. Issue **#8** stays closed (do not reopen). Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner — upstream gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40). There is no open product feature work on this tip beyond that upstream park.
+Continuation note for the next harness. Issue **#30** is merged. Open work is issue **#32** on `feat/issue-32-ansible-sync`: Ansible `group_vars` applied onto the lab group store. Issue **#8** stays closed (do not reopen). Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner — upstream gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
 
 Written 2026-09-27. Issues #12, #13, #14, #18, #21, #24, #26, #28, and #30 are closed. #8 stays closed.
 

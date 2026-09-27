@@ -28,6 +28,8 @@ python3 fleet_store.py --db fleet.sqlite set-desired pixel-7 desired-state.examp
 python3 fleet_store.py --db fleet.sqlite clear-desired pixel-7
 ```
 
+Ansible `group_vars/<group>.json` is that same desired-state document. Apply an inventory with `python3 ansible_sync.py` (see `ansible/README.md`).
+
 Smoke with client cert:
 
 ```bash
