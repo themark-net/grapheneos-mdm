@@ -16,6 +16,7 @@ class GetProvisioningModeActivity : Activity() {
             .getIntegerArrayListExtra(DevicePolicyManager.EXTRA_PROVISIONING_ALLOWED_PROVISIONING_MODES)
             ?.map { it.toInt() }
             ?.toIntArray()
+        applyProvisioningExtras(this, intent)
         val mode = selectFullyManagedMode(allowed)
         if (mode == null) {
             setResult(RESULT_CANCELED)

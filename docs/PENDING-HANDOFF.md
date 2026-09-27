@@ -1,6 +1,6 @@
 # Pending handoff
 
-Continuation note for the next harness. Issue **#28** is merged. Issue **#8** stays open because stock GrapheneOS still has no 6-tap wizard. There is no open client or server feature work on this tip beyond that park.
+Continuation note for the next harness. Issue **#28** is merged. Open work is issue **#30** on `feat/issue-30-provisioning-qr`: a real provisioning QR and `serverBaseUrl` from that QR. Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner, so issue **#8** stays a wizard gap even if the GitHub issue was closed.
 
 Written 2026-09-25. Issues #12, #13, #14, #18, #21, #24, #26, and #28 are closed.
 
