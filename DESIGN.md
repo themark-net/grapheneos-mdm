@@ -64,6 +64,9 @@ against the next keymint certificate chain.
 that sqlite file (127.0.0.1:8787). It lists devices and groups, assigns a
 group, and edits desired state. It does not accept phone traffic. An empty
 database shows empty-state copy and does not seed a sample device.
+Wipe is confirmed on that page (type the device id or group name) and then
+queued for the next check-in. The page does not claim the device is already
+wiped. See [docs/design/](docs/design/).
 See [docs/MTLS.md](docs/MTLS.md).
 
 **Production (still external):** a FastAPI / Go control plane that:

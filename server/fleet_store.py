@@ -292,10 +292,12 @@ class FleetStore:
                 """
                 SELECT d.device_id, d.client_cn, d.last_checkin_at, d.inventory_json,
                        d.attestation_status, d.verified_boot_state,
-                       o.desired_json, g.group_name
+                       o.desired_json, o.updated_at AS desired_updated_at,
+                       g.group_name, grp.updated_at AS group_updated_at
                 FROM devices d
                 LEFT JOIN desired_overrides o ON o.device_id = d.device_id
                 LEFT JOIN device_groups g ON g.device_id = d.device_id
+                LEFT JOIN groups grp ON grp.name = g.group_name
                 WHERE d.device_id = ?
                 """,
                 (device_id,),
@@ -309,6 +311,8 @@ class FleetStore:
             "lastCheckinAt": row["last_checkin_at"],
             "inventory": json.loads(row["inventory_json"]),
             "desiredOverride": override,
+            "desiredUpdatedAt": row["desired_updated_at"],
+            "groupUpdatedAt": row["group_updated_at"],
             "group": row["group_name"],
             "attestationStatus": row["attestation_status"],
             "verifiedBootState": row["verified_boot_state"],

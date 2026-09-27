@@ -36,7 +36,7 @@ The operator page is local only:
 python3 ui_server.py --db fleet.sqlite --desired desired-state.example.json
 ```
 
-Open http://127.0.0.1:8787/. It reads the same sqlite file. It does not replace the mTLS check-in port.
+Open http://127.0.0.1:8787/. It reads the same sqlite file. It does not replace the mTLS check-in port. Wipe device… asks for the device id before queueing a wipe; saving JSON that contains a wipe command asks the same way. The page then says the wipe runs on the next check-in. See `docs/design/`.
 
 Smoke with client cert:
 

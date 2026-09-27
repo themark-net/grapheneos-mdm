@@ -99,7 +99,30 @@
       line-height: 1.4;
     }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
-    .error { color: var(--bad); font-size: 13px; min-height: 1.2em; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .error, .status { font-size: 13px; min-height: 1.2em; margin: 8px 0 0; }
+    .error { color: var(--bad); }
+    .danger-zone { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .danger-zone h3 { color: var(--bad); margin: 0 0 8px; font-size: 14px; }
+    #modal[hidden] { display: none; }
+    #modal:not([hidden]) {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .modal-card {
+      width: min(480px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px 20px 20px;
+    }
+    .modal-card h2 { font-family: inherit; font-size: 18px; }
+    .modal-card label { display: block; margin-top: 8px; }
+    .modal-card input { width: 100%; margin: 6px 0 4px; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
     th { color: var(--muted); font-weight: 500; }
@@ -121,11 +144,27 @@
     <section class="list" id="list"></section>
     <section class="detail" id="detail"></section>
   </main>
+  <div id="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <h2 id="modal-title"></h2>
+      <p id="modal-copy"></p>
+      <dl id="modal-facts"></dl>
+      <label id="modal-label" for="modal-input"></label>
+      <input id="modal-input" type="text" autocomplete="off" spellcheck="false">
+      <div class="actions">
+        <button id="modal-cancel" type="button">Cancel</button>
+        <button id="modal-confirm" class="danger" type="button" disabled></button>
+      </div>
+    </div>
+  </div>
   <script>
+    const WIPE_QUEUED = "Wipe queued — runs on next check-in.";
+    const UNKNOWN_DEVICE = "Unknown device — not in this database.";
     const listEl = document.getElementById("list");
     const detailEl = document.getElementById("detail");
     const tabDevices = document.getElementById("tab-devices");
     const tabGroups = document.getElementById("tab-groups");
+    const modalEl = document.getElementById("modal");
     let mode = "devices";
     let selected = null;
     let groups = [];
@@ -134,6 +173,12 @@
       return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
       }[ch]));
+    }
+
+    function containsWipe(desired) {
+      const commands = desired && desired.commands;
+      if (!Array.isArray(commands)) return false;
+      return commands.some((command) => command && command.type === "wipe");
     }
 
     function pill(status) {
@@ -145,13 +190,148 @@
     async function api(path, options) {
       const response = await fetch(path, options);
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || response.statusText);
+      if (!response.ok) {
+        const error = new Error(body.error || response.statusText);
+        error.status = response.status;
+        throw error;
+      }
       return body;
     }
 
     function showError(err) {
       const node = detailEl.querySelector(".error");
-      if (node) node.textContent = err.message || String(err);
+      const text = "FAIL " + (err.message || String(err));
+      if (node) node.textContent = text;
+      else detailEl.innerHTML = `<p class="error">${esc(text)}</p>`;
+    }
+
+    function showStatus(text, kind) {
+      const node = detailEl.querySelector(".status");
+      if (!node) return;
+      node.textContent = text || "";
+      node.className = "status" + (text && kind ? " " + kind : "");
+    }
+
+    function showStatusIfEmpty(text, kind) {
+      const node = detailEl.querySelector(".status");
+      if (!node || node.textContent) return;
+      showStatus(text, kind);
+    }
+
+    function closeModal() {
+      modalEl.hidden = true;
+      document.getElementById("modal-confirm").onclick = null;
+    }
+
+    function openModal(opts) {
+      document.getElementById("modal-title").textContent = opts.title;
+      document.getElementById("modal-copy").textContent = opts.copy;
+      document.getElementById("modal-facts").innerHTML = (opts.facts || []).map(
+        ([label, value]) => `<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`
+      ).join("");
+      document.getElementById("modal-label").textContent = opts.label;
+      const input = document.getElementById("modal-input");
+      const confirm = document.getElementById("modal-confirm");
+      input.value = "";
+      confirm.textContent = opts.confirmLabel;
+      confirm.disabled = true;
+      input.oninput = () => {
+        confirm.disabled = input.value !== opts.expect;
+      };
+      confirm.onclick = async () => {
+        if (input.value !== opts.expect) return;
+        const typed = input.value;
+        confirm.disabled = true;
+        try {
+          await opts.onConfirm(typed);
+          closeModal();
+        } catch (err) {
+          closeModal();
+          showError(err);
+        }
+      };
+      modalEl.hidden = false;
+      input.focus();
+    }
+
+    document.getElementById("modal-cancel").onclick = () => closeModal();
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !modalEl.hidden) closeModal();
+    });
+
+    function openDeviceWipeModal(device, onConfirm) {
+      const facts = [["Device", device.deviceId]];
+      if (device.group) facts.push(["Group", device.group]);
+      facts.push(["Source", device.desiredSource || ""]);
+      openModal({
+        title: "Confirm wipe",
+        copy: "This factory-resets the device on its next check-in. It cannot be undone from this page.",
+        facts,
+        label: "Type the device id to confirm:",
+        expect: device.deviceId,
+        confirmLabel: "Wipe on next check-in",
+        onConfirm,
+      });
+    }
+
+    function memberFact(members) {
+      if (!members.length) {
+        return "No devices assigned now — wipe runs when a device in this group checks in.";
+      }
+      return members.join(", ");
+    }
+
+    async function saveDeviceDesired(id, device, parsed) {
+      const send = async (typed) => {
+        const headers = { "Content-Type": "application/json" };
+        if (typed) headers["X-Confirm-Wipe"] = typed;
+        await api("/api/devices/" + encodeURIComponent(id) + "/desired", {
+          method: "POST",
+          headers,
+          body: JSON.stringify(parsed),
+        });
+        await refresh();
+        await openDevice(id);
+        if (!containsWipe(parsed)) showStatusIfEmpty("Saved", "ok");
+      };
+      if (containsWipe(parsed)) {
+        openDeviceWipeModal(device, send);
+        return;
+      }
+      await send(null);
+    }
+
+    async function saveGroupDesired(name, parsed, members) {
+      const send = async (typed) => {
+        const headers = { "Content-Type": "application/json" };
+        if (typed) headers["X-Confirm-Wipe"] = typed;
+        await api("/api/groups/" + encodeURIComponent(name), {
+          method: "PUT",
+          headers,
+          body: JSON.stringify(parsed),
+        });
+        selected = name;
+        await refresh();
+        await openGroup(name);
+        showStatus(containsWipe(parsed) ? WIPE_QUEUED : "Saved", containsWipe(parsed) ? "warn" : "ok");
+      };
+      if (containsWipe(parsed)) {
+        openModal({
+          title: "Confirm wipe for group",
+          copy: "Saving this group queues a factory reset for every member on their next check-in.",
+          facts: [
+            ["Group", name],
+            ["Members", memberFact(members)],
+            ["Count", String(members.length)],
+          ],
+          label: "Type the group name to confirm:",
+          expect: name,
+          confirmLabel: "Wipe all members on check-in",
+          onConfirm: send,
+        });
+        return;
+      }
+      await send(null);
     }
 
     async function loadDevices() {
@@ -236,7 +416,17 @@
       selected = id;
       mode = "devices";
       setTabs();
-      const device = await api("/api/devices/" + encodeURIComponent(id));
+      let device;
+      try {
+        device = await api("/api/devices/" + encodeURIComponent(id));
+      } catch (err) {
+        if (err.status === 404) {
+          detailEl.innerHTML = `<p class="error">${esc(UNKNOWN_DEVICE)}</p>`;
+        } else {
+          detailEl.innerHTML = `<p class="error">FAIL ${esc(err.message)}</p>`;
+        }
+        return;
+      }
       const inventory = device.inventory || {};
       const location = inventory.location;
       const packages = inventory.installedPackages || [];
@@ -305,17 +495,23 @@
               <thead><tr><th>Required</th><th>Last report</th></tr></thead>
               <tbody>${requiredRows || `<tr><td colspan="2">No packages required</td></tr>`}</tbody>
             </table>
-            <p class="meta">Queued commands run on every check-in until removed: ${esc((configured.commands || []).map((cmd) => cmd.type).join(", ") || "none")}.</p>
+            <p class="meta">Queued commands: ${esc((configured.commands || []).map((cmd) => cmd.type).join(", ") || "none")}. Wipe is under Danger — or confirm if JSON includes wipe.</p>
             <div class="actions">
               <button id="save-desired" type="button">Save as device override</button>
               <button id="clear-desired" class="danger" type="button">Clear override</button>
             </div>
+            ${device.wipeRecover ? `<p class="status warn">${esc(device.wipeRecover)}</p>` : `<p class="status"></p>`}
             <p class="error"></p>
             <details>
               <summary>Raw desired-state JSON</summary>
               <textarea id="desired" spellcheck="false">${esc(JSON.stringify(configured, null, 2))}</textarea>
               <div class="actions"><button id="save-json" type="button">Save raw JSON as override</button></div>
             </details>
+            <div class="danger-zone">
+              <h3>Danger</h3>
+              <p class="meta">Factory-reset this device on next check-in.</p>
+              <button id="wipe-device" class="danger" type="button">Wipe device…</button>
+            </div>
           </div>
         </div>`;
       document.getElementById("save-group").onclick = async () => {
@@ -327,28 +523,24 @@
           });
           await refresh();
           await openDevice(id);
+          showStatusIfEmpty("Saved", "ok");
         } catch (err) { showError(err); }
       };
       document.getElementById("save-desired").onclick = async () => {
         try {
-          await api("/api/devices/" + encodeURIComponent(id) + "/desired", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(readConfigured(configured)),
-          });
-          await refresh();
-          await openDevice(id);
+          await saveDeviceDesired(id, device, readConfigured(configured));
         } catch (err) { showError(err); }
       };
       document.getElementById("save-json").onclick = async () => {
+        let parsed;
         try {
-          await api("/api/devices/" + encodeURIComponent(id) + "/desired", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(JSON.parse(document.getElementById("desired").value)),
-          });
-          await refresh();
-          await openDevice(id);
+          parsed = JSON.parse(document.getElementById("desired").value);
+        } catch (err) {
+          showError(new Error("invalid JSON"));
+          return;
+        }
+        try {
+          await saveDeviceDesired(id, device, parsed);
         } catch (err) { showError(err); }
       };
       document.getElementById("clear-desired").onclick = async () => {
@@ -356,7 +548,19 @@
           await api("/api/devices/" + encodeURIComponent(id) + "/desired", { method: "DELETE" });
           await refresh();
           await openDevice(id);
+          showStatusIfEmpty("Saved", "ok");
         } catch (err) { showError(err); }
+      };
+      document.getElementById("wipe-device").onclick = () => {
+        openDeviceWipeModal(device, async (typed) => {
+          await api("/api/devices/" + encodeURIComponent(id) + "/wipe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Confirm-Wipe": typed },
+            body: "{}",
+          });
+          await refresh();
+          await openDevice(id);
+        });
       };
       await loadDevices();
     }
@@ -384,55 +588,83 @@
   "requiredPackages": [],
   "policyFlags": {}
 }`;
+      const members = existing ? (existing.deviceIds || []) : [];
       return `
-        <h2>${existing ? name : "New group"}</h2>
-        <p class="meta">${existing ? (existing.deviceIds || []).join(", ") || "No devices assigned" : "The file equivalent of ansible/group_vars."}</p>
+        <h2>${existing ? esc(name) : "New group"}</h2>
+        <p class="meta">${existing ? esc(members.join(", ") || "No devices assigned") : "Shared desired state for devices you assign on the Devices tab."}</p>
         ${existing ? "" : `<div class="actions"><label>Name</label><input id="new-name" type="text" placeholder="pixels"></div>`}
         <textarea id="group-json" spellcheck="false">${body.replace(/</g, "&lt;")}</textarea>
         <div class="actions">
           <button id="save-group-json" type="button">${existing ? "Save group" : "Create group"}</button>
-          ${existing ? `<button id="delete-group" class="danger" type="button">Delete group</button>` : ""}
         </div>
-        <p class="error"></p>`;
+        <p class="status"></p>
+        <p class="error"></p>
+        ${existing ? `<div class="danger-zone">
+          <h3>Danger</h3>
+          <p class="meta">Members become ungrouped. Desired state for this group is removed.</p>
+          <button id="delete-group" class="danger" type="button">Delete group</button>
+        </div>` : ""}`;
     }
 
     function bindNewGroup() {
       document.getElementById("save-group-json").onclick = async () => {
+        const name = document.getElementById("new-name").value.trim();
+        let parsed;
         try {
-          const name = document.getElementById("new-name").value.trim();
-          const parsed = JSON.parse(document.getElementById("group-json").value);
-          await api("/api/groups/" + encodeURIComponent(name), {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(parsed),
-          });
-          selected = name;
-          await refresh();
+          parsed = JSON.parse(document.getElementById("group-json").value);
+        } catch (err) {
+          showError(new Error("invalid JSON"));
+          return;
+        }
+        if (!name) {
+          showError(new Error("group name is required"));
+          return;
+        }
+        try {
+          await saveGroupDesired(name, parsed, []);
         } catch (err) { showError(err); }
       };
     }
 
     async function openGroup(name) {
       selected = name;
-      const group = await api("/api/groups/" + encodeURIComponent(name));
+      let group;
+      try {
+        group = await api("/api/groups/" + encodeURIComponent(name));
+      } catch (err) {
+        detailEl.innerHTML = `<p class="error">FAIL ${esc(err.message)}</p>`;
+        return;
+      }
       detailEl.innerHTML = groupForm(group);
       document.getElementById("save-group-json").onclick = async () => {
+        let parsed;
         try {
-          const parsed = JSON.parse(document.getElementById("group-json").value);
-          await api("/api/groups/" + encodeURIComponent(name), {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(parsed),
-          });
-          await refresh();
+          parsed = JSON.parse(document.getElementById("group-json").value);
+        } catch (err) {
+          showError(new Error("invalid JSON"));
+          return;
+        }
+        try {
+          await saveGroupDesired(name, parsed, group.deviceIds || []);
         } catch (err) { showError(err); }
       };
-      document.getElementById("delete-group").onclick = async () => {
-        try {
-          await api("/api/groups/" + encodeURIComponent(name), { method: "DELETE" });
-          selected = null;
-          await refresh();
-        } catch (err) { showError(err); }
+      document.getElementById("delete-group").onclick = () => {
+        openModal({
+          title: "Delete group " + name + "?",
+          copy: "Members become ungrouped. Desired state for this group is removed.",
+          facts: [["Group", name]],
+          label: "Type the group name to confirm:",
+          expect: name,
+          confirmLabel: "Delete group",
+          onConfirm: async (typed) => {
+            await api("/api/groups/" + encodeURIComponent(name), {
+              method: "DELETE",
+              headers: { "X-Confirm-Delete": typed },
+            });
+            selected = null;
+            await refresh();
+          },
+        });
       };
       await loadGroups();
     }
@@ -449,7 +681,7 @@
 
     tabDevices.onclick = async () => { mode = "devices"; selected = null; setTabs(); await loadDevices(); };
     tabGroups.onclick = async () => { mode = "groups"; selected = null; setTabs(); await loadGroups(); };
-    loadDevices().catch((err) => { detailEl.innerHTML = `<p class="error">${err.message}</p>`; });
+    loadDevices().catch((err) => { detailEl.innerHTML = `<p class="error">FAIL ${esc(err.message)}</p>`; });
   </script>
 </body>
 </html>

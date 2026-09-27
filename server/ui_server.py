@@ -10,8 +10,10 @@ accept phone traffic.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,58 @@ from fleet_store import FleetStore  # noqa: E402
 
 PAGE = (_SERVER_DIR / "ui" / "index.html").read_text(encoding="utf-8")
 EMPTY_DESIRED: dict[str, Any] = {"schemaVersion": 1, "requiredPackages": [], "policyFlags": {}}
+
+WIPE_QUEUED = "Wipe queued — runs on next check-in."
+WIPE_STILL = "Device checked in again. Wipe may not have applied — inspect desired commands."
+UNKNOWN_DEVICE = "Unknown device — not in this database."
+
+
+def contains_wipe(desired: Any) -> bool:
+    """True when desired.commands has an entry whose type is exactly wipe."""
+    if not isinstance(desired, dict):
+        return False
+    commands = desired.get("commands")
+    if not isinstance(commands, list):
+        return False
+    return any(isinstance(item, dict) and item.get("type") == "wipe" for item in commands)
+
+
+def merge_wipe_command(desired: dict[str, Any], command_id: str) -> dict[str, Any]:
+    """Copy desired and ensure one wipe command. Other keys stay."""
+    if not isinstance(desired, dict):
+        raise ValueError("desired state must be an object")
+    merged = copy.deepcopy(desired)
+    commands = merged.get("commands")
+    if not isinstance(commands, list):
+        commands = []
+    else:
+        commands = list(commands)
+    if not any(isinstance(item, dict) and item.get("type") == "wipe" for item in commands):
+        commands.append({"type": "wipe", "id": command_id})
+    merged["commands"] = commands
+    merged.setdefault("schemaVersion", 1)
+    merged.setdefault("requiredPackages", [])
+    merged.setdefault("policyFlags", {})
+    return merged
+
+
+def wipe_recover(
+    has_wipe: bool,
+    last_checkin_at: str | None,
+    saved_at: str | None,
+    inventory_present: bool,
+) -> str | None:
+    """Honest wipe status. Never reports the device as already wiped."""
+    if not has_wipe:
+        return None
+    if (
+        inventory_present
+        and last_checkin_at
+        and saved_at
+        and last_checkin_at > saved_at
+    ):
+        return WIPE_STILL
+    return WIPE_QUEUED
 
 
 class FleetUI(BaseHTTPRequestHandler):
@@ -60,6 +114,9 @@ class FleetUI(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         device_id = _suffix(path, "/api/devices/")
+        if device_id and device_id.endswith("/wipe"):
+            self._queue_wipe(device_id[: -len("/wipe")])
+            return
         if device_id and device_id.endswith("/group"):
             self._assign_group(device_id[: -len("/group")])
             return
@@ -75,7 +132,15 @@ class FleetUI(BaseHTTPRequestHandler):
             self._json(404, {"error": "not found"})
             return
         try:
-            self.store.set_group_desired(group, self._read_json())
+            desired = self._read_json()
+        except ValueError as exc:
+            self._json(400, {"error": str(exc)})
+            return
+        if contains_wipe(desired) and not self._header_matches("X-Confirm-Wipe", group):
+            self._json(400, {"error": "wipe confirmation does not match"})
+            return
+        try:
+            self.store.set_group_desired(group, desired)
         except ValueError as exc:
             self._json(400, {"error": str(exc)})
             return
@@ -92,6 +157,9 @@ class FleetUI(BaseHTTPRequestHandler):
             return
         group = _suffix(path, "/api/groups/")
         if group and "/" not in group:
+            if not self._header_matches("X-Confirm-Delete", group):
+                self._json(400, {"error": "type the group name to confirm delete"})
+                return
             if not self.store.clear_group_desired(group):
                 self._json(404, {"error": "unknown group"})
                 return
@@ -110,10 +178,19 @@ class FleetUI(BaseHTTPRequestHandler):
         found["resolvedDesired"] = self.store.desired_for(device_id, self.default_desired)
         if found.get("desiredOverride") is not None:
             found["desiredSource"] = "device"
+            saved_at = found.get("desiredUpdatedAt")
         elif found.get("group"):
             found["desiredSource"] = "group"
+            saved_at = found.get("groupUpdatedAt")
         else:
             found["desiredSource"] = "default"
+            saved_at = None
+        found["wipeRecover"] = wipe_recover(
+            contains_wipe(found["resolvedDesired"]),
+            found.get("lastCheckinAt"),
+            saved_at,
+            found.get("inventory") is not None,
+        )
         self._json(200, found)
 
     def _assign_group(self, device_id: str) -> None:
@@ -142,11 +219,46 @@ class FleetUI(BaseHTTPRequestHandler):
             return
         try:
             desired = self._read_json()
+        except ValueError as exc:
+            self._json(400, {"error": str(exc)})
+            return
+        if contains_wipe(desired) and not self._header_matches("X-Confirm-Wipe", device_id):
+            self._json(400, {"error": "wipe confirmation does not match"})
+            return
+        try:
             self.store.set_desired(device_id, desired)
         except ValueError as exc:
             self._json(400, {"error": str(exc)})
             return
         self._device(device_id)
+
+    def _queue_wipe(self, device_id: str) -> None:
+        if self.store.get_device(device_id) is None:
+            self._json(404, {"error": "unknown device"})
+            return
+        try:
+            self._read_json()
+        except ValueError as exc:
+            self._json(400, {"error": str(exc)})
+            return
+        if not self._header_matches("X-Confirm-Wipe", device_id):
+            self._json(400, {"error": "wipe confirmation does not match"})
+            return
+        current = self.store.get_device(device_id)
+        assert current is not None
+        base = current.get("desiredOverride")
+        if not isinstance(base, dict):
+            base = self.store.desired_for(device_id, self.default_desired)
+        try:
+            merged = merge_wipe_command(base, "wipe-" + uuid.uuid4().hex[:12])
+            self.store.set_desired(device_id, merged)
+        except ValueError as exc:
+            self._json(400, {"error": str(exc)})
+            return
+        self._device(device_id)
+
+    def _header_matches(self, name: str, expected: str) -> bool:
+        return self.headers.get(name, "") == expected
 
     def _read_json(self) -> Any:
         length = int(self.headers.get("Content-Length", "0") or 0)
