@@ -1,8 +1,18 @@
 # Pending handoff
 
-Continuation note for the next harness. Issue **#30** is merged. Open work is issue **#32** on `feat/issue-32-ansible-sync`: Ansible `group_vars` applied onto the lab group store. Issue **#8** stays closed (do not reopen). Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner — upstream gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
+Continuation note for the next harness. Issue **#32** is merged. Issue **#8** stays closed (do not reopen). Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner — upstream gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
 
-Written 2026-09-27. Issues #12, #13, #14, #18, #21, #24, #26, #28, and #30 are closed. #8 stays closed.
+Written 2026-09-27. Issues #12, #13, #14, #18, #21, #24, #26, #28, #30, and #32 are closed. #8 stays closed.
+
+## Shipped: issue #32 — PR #33
+
+Squash `47523f98e81265603b095832891a7102262d128c` (was head `c62030f`).
+
+`ansible/group_vars/<group>.json` is the desired-state document the agent already accepts. JSON is valid Ansible group_vars, so this does not add a YAML parser.
+
+`ansible/inventory/hosts.ini` lists device ids under `[group]`. `server/ansible_sync.py` writes each file with `set-group-desired` and assigns each device with `set-group`. A device listed in two groups is an error, because the store keeps one group per device. `:vars` and `:children` sections are ignored.
+
+A per-device override from `fleet_store.py set-desired` still wins over the group. This PR does not change the agent.
 
 ## Shipped: issue #30 — PR #31
 
@@ -77,12 +87,12 @@ Omit `passwordComplexity`, `maximumTimeToLockMs`, `suspendedPackages`, or `hidde
 | | |
 | --- | --- |
 | Branch | `main` |
-| SHA | `dbaa2d0` |
-| Subject | Provisioning QR payload and server URL from the QR (#31) |
+| SHA | `47523f9` |
+| Subject | Apply Ansible group_vars onto fleet groups (#33) |
 
 ## 2. What shipped
 
-Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24/#26/#28/#30.
+Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24/#26/#28/#30/#32.
 
 ### PR #17 — clear user restrictions — Fixes #14
 
@@ -121,6 +131,10 @@ Squash `5dc98c188cc9f06d5f828e497cb1b0dc72a6202d`.
 ### PR #31 — provisioning QR + server URL from QR — Fixes #30
 
 Squash `dbaa2d05e1b89db5a11679678e11d4da6cde4ff0`.
+
+### PR #33 — Ansible group_vars onto fleet groups — Fixes #32
+
+Squash `47523f98e81265603b095832891a7102262d128c`.
 
 Earlier commits still on this tip, outside this stack: WorkManager scheduling (#11, issue #5), desired-apps enforce (#10, issue #4), mTLS check-in (#9, issue #3), and the enrollment guide (#7).
 
