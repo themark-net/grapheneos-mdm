@@ -60,6 +60,10 @@ Optional `--db` sqlite keeps the last inventory per device, a per-device
 desired-state override, and a group desired state (device override, else
 group, else the default file). A stored attestation challenge is checked
 against the next keymint certificate chain.
+[`server/ui_server.py`](server/ui_server.py) is a localhost operator page for
+that sqlite file (127.0.0.1:8787). It lists devices and groups, assigns a
+group, and edits desired state. It does not accept phone traffic. An empty
+database shows empty-state copy and does not seed a sample device.
 See [docs/MTLS.md](docs/MTLS.md).
 
 **Production (still external):** a FastAPI / Go control plane that:
