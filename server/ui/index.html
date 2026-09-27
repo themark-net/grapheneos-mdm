@@ -68,6 +68,13 @@
     .meta { color: var(--muted); font-size: 12px; }
     .detail { padding: 18px 20px 24px; }
     .detail h2 { margin: 0 0 4px; font-size: 16px; font-family: ui-monospace, monospace; }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 16px; }
+    @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+    .kicker { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+    .field { display: grid; gap: 4px; margin: 0 0 10px; }
+    .field select, .field input { width: 100%; }
+    details { margin-top: 14px; }
+    summary { cursor: pointer; color: var(--muted); }
     dl { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; margin: 14px 0; }
     dt { color: var(--muted); }
     dd { margin: 0; }
@@ -82,6 +89,7 @@
     .ok { color: var(--ok); border-color: #2f5b45; }
     .warn { color: var(--warn); border-color: #6a5728; }
     .bad { color: var(--bad); border-color: #6a3030; }
+    textarea.short { min-height: 72px; }
     textarea {
       width: 100%;
       min-height: 220px;
@@ -103,7 +111,7 @@
 <body>
   <header>
     <h1>GrapheneOS MDM</h1>
-    <p>Lab fleet on this machine. Phones still check in over mutual TLS.</p>
+    <p>Left of a device is the last report. Right is the policy the next check-in applies.</p>
   </header>
   <nav>
     <button id="tab-devices" type="button" aria-pressed="true">Devices</button>
@@ -168,6 +176,62 @@
       if (!selected && data.devices[0]) await openDevice(data.devices[0].deviceId);
     }
 
+    const POLICY_FLAGS = [
+      ["disallowAddUser", "Block adding users"],
+      ["disallowFactoryReset", "Block factory reset"],
+      ["disallowInstallUnknownSources", "Block unknown-source installs"],
+      ["cameraDisabled", "Camera disabled"],
+      ["locationEnabled", "Location radio"],
+      ["usbDataSignalingEnabled", "USB data signaling"],
+      ["disallowConfigWifi", "Block Wi-Fi configuration"],
+      ["disallowConfigMobileNetworks", "Block mobile-network configuration"],
+      ["disallowUserSwitch", "Block switching users"],
+    ];
+
+    function tri(name, label, value) {
+      const current = value === true ? "true" : value === false ? "false" : "";
+      return `<label class="field">${esc(label)}
+        <select data-flag="${name}">
+          <option value="" ${current === "" ? "selected" : ""}>Leave alone</option>
+          <option value="true" ${current === "true" ? "selected" : ""}>On</option>
+          <option value="false" ${current === "false" ? "selected" : ""}>Off</option>
+        </select></label>`;
+    }
+
+    function listField(id, label, values) {
+      const text = Array.isArray(values) ? values.join(", ") : "";
+      return `<label class="field">${esc(label)}
+        <input id="${id}" type="text" value="${esc(text)}" placeholder="Leave blank to leave the phone alone">
+      </label>`;
+    }
+
+    function readConfigured(base) {
+      const flags = Object.assign({}, (base.policyFlags || {}));
+      document.querySelectorAll("[data-flag]").forEach((el) => {
+        if (el.value === "") delete flags[el.dataset.flag];
+        else flags[el.dataset.flag] = el.value === "true";
+      });
+      const patch = document.getElementById("min-patch").value.trim();
+      if (patch) flags.minSecurityPatch = patch; else delete flags.minSecurityPatch;
+      const complexity = document.getElementById("password").value;
+      if (complexity) flags.passwordComplexity = complexity; else delete flags.passwordComplexity;
+      const lockMs = document.getElementById("lock-ms").value.trim();
+      if (lockMs) flags.maximumTimeToLockMs = Number(lockMs); else delete flags.maximumTimeToLockMs;
+      for (const key of ["suspendedPackages", "hiddenPackages", "lockTaskPackages"]) {
+        const raw = document.getElementById(key).value.trim();
+        if (!raw) delete flags[key];
+        else flags[key] = raw.split(",").map((part) => part.trim()).filter(Boolean);
+      }
+      const names = document.getElementById("required").value.split("\n").map((part) => part.trim()).filter(Boolean);
+      const previous = base.requiredPackages || [];
+      return {
+        schemaVersion: 1,
+        requiredPackages: names.map((name) => previous.find((pkg) => pkg.packageName === name) || { packageName: name }),
+        policyFlags: flags,
+        commands: base.commands || [],
+      };
+    }
+
     async function openDevice(id) {
       selected = id;
       mode = "devices";
@@ -176,40 +240,84 @@
       const inventory = device.inventory || {};
       const location = inventory.location;
       const packages = inventory.installedPackages || [];
+      const installed = new Set(packages.map((pkg) => pkg.packageName));
+      const configured = device.desiredOverride || device.resolvedDesired || { policyFlags: {}, requiredPackages: [] };
+      const flags = configured.policyFlags || {};
+      const updater = inventory.osUpdater;
       const groupOptions = [`<option value="">No group</option>`]
         .concat(groups.map((group) => `<option value="${esc(group.name)}" ${group.name === device.group ? "selected" : ""}>${esc(group.name)}</option>`))
         .join("");
-      const editor = JSON.stringify(device.desiredOverride || device.resolvedDesired, null, 2);
+      const complexity = flags.passwordComplexity || "";
+      const requiredRows = (configured.requiredPackages || []).map((pkg) => {
+        const present = installed.has(pkg.packageName);
+        return `<tr><td>${esc(pkg.packageName)}</td><td>${present ? "Installed" : "Missing on last report"}</td></tr>`;
+      }).join("");
       detailEl.innerHTML = `
         <h2>${esc(device.deviceId)}</h2>
-        <p class="meta">Certificate ${device.clientCn} · source of desired state: ${device.desiredSource}</p>
-        <dl>
-          <dt>Last check-in</dt><dd>${device.lastCheckinAt}</dd>
-          <dt>Attestation</dt><dd>${pill(device.attestationStatus)} ${device.verifiedBootState || ""}</dd>
-          <dt>OS</dt><dd>${inventory.osVersion || "?"} · ${inventory.securityPatch || "?"}</dd>
-          <dt>Location</dt><dd>${location ? `${location.latitude}, ${location.longitude} (${location.provider || "unknown"})` : "not reported"}</dd>
-          <dt>Users</dt><dd>${(inventory.users || []).map((user) => user.serial + (user.secondary ? " secondary" : "")).join(", ") || "not reported"}</dd>
-        </dl>
-        <label>Group</label>
-        <div class="actions">
-          <select id="group">${groupOptions}</select>
-          <button id="save-group" type="button">Save group</button>
-        </div>
-        <h3>Desired state</h3>
-        <p class="meta">Showing the ${device.desiredSource} policy. Save stores a copy as this device's override. Clear returns to the group, then the server default. A wipe command in this JSON runs on the phone's next check-in.</p>
-        <textarea id="desired" spellcheck="false">${editor.replace(/</g, "&lt;")}</textarea>
-        <div class="actions">
-          <button id="save-desired" type="button">Save override</button>
-          <button id="clear-desired" class="danger" type="button">Clear override</button>
-        </div>
-        <p class="error"></p>
-        <h3>Installed packages</h3>
-        <table>
-          <thead><tr><th>Package</th><th>Version</th></tr></thead>
-          <tbody>
-            ${packages.map((pkg) => `<tr><td>${esc(pkg.packageName)}</td><td>${esc(pkg.versionName || "")}</td></tr>`).join("") || `<tr><td colspan="2">None reported</td></tr>`}
-          </tbody>
-        </table>`;
+        <p class="meta">Certificate ${esc(device.clientCn)} · last check-in ${esc(device.lastCheckinAt)} · configuration from ${esc(device.desiredSource)}</p>
+        <div class="split">
+          <div>
+            <p class="kicker">Reported</p>
+            <p class="meta">Read-only. This is the last inventory the phone sent. Nothing here changes the device.</p>
+            <dl>
+              <dt>Model</dt><dd>${esc(inventory.model || "not reported")}</dd>
+              <dt>OS</dt><dd>${esc(inventory.osVersion || "?")} · patch ${esc(inventory.securityPatch || "?")}</dd>
+              <dt>Patch meets policy</dt><dd>${inventory.securityPatchOk === true ? "yes" : inventory.securityPatchOk === false ? "no" : "not reported"}</dd>
+              <dt>Device owner</dt><dd>${inventory.isDeviceOwner === true ? "yes" : inventory.isDeviceOwner === false ? "no" : "not reported"}</dd>
+              <dt>Attestation</dt><dd>${pill(device.attestationStatus)} ${esc(device.verifiedBootState || inventory.attestation && inventory.attestation.verifiedBootState || "")}</dd>
+              <dt>Location</dt><dd>${location ? esc(location.latitude + ", " + location.longitude + " (" + (location.provider || "unknown") + ")") : "not reported"}</dd>
+              <dt>Users</dt><dd>${esc((inventory.users || []).map((user) => user.serial + (user.secondary ? " secondary" : "")).join(", ") || "not reported")}</dd>
+              <dt>OS updater</dt><dd>${updater ? esc((updater.installed ? "installed" : "not installed") + (updater.versionName ? " " + updater.versionName : "") + (updater.enabled === false ? ", disabled" : "")) : "not reported"}</dd>
+            </dl>
+            <h3>Installed packages</h3>
+            <table>
+              <thead><tr><th>Package</th><th>Version</th></tr></thead>
+              <tbody>${packages.map((pkg) => `<tr><td>${esc(pkg.packageName)}</td><td>${esc(pkg.versionName || "")}</td></tr>`).join("") || `<tr><td colspan="2">None reported</td></tr>`}</tbody>
+            </table>
+          </div>
+          <div>
+            <p class="kicker">Configured</p>
+            <p class="meta">Applied on the next check-in. Leave a control on “Leave alone” and that setting is not changed. Saving here writes a device override.</p>
+            <label class="field">Group
+              <span class="actions"><select id="group">${groupOptions}</select><button id="save-group" type="button">Save group</button></span>
+            </label>
+            ${POLICY_FLAGS.map(([name, label]) => tri(name, label, flags[name])).join("")}
+            <label class="field">Minimum security patch
+              <input id="min-patch" type="text" value="${esc(flags.minSecurityPatch || "")}" placeholder="YYYY-MM-DD, or blank to leave alone">
+            </label>
+            <label class="field">Password complexity
+              <select id="password">
+                <option value="" ${complexity === "" ? "selected" : ""}>Leave alone</option>
+                ${["none", "low", "medium", "high"].map((item) => `<option value="${item}" ${complexity === item ? "selected" : ""}>${item}</option>`).join("")}
+              </select>
+            </label>
+            <label class="field">Lock timeout (ms)
+              <input id="lock-ms" type="text" value="${esc(flags.maximumTimeToLockMs ?? "")}" placeholder="Blank leaves it alone. 0 clears the limit.">
+            </label>
+            ${listField("suspendedPackages", "Suspended packages", flags.suspendedPackages)}
+            ${listField("hiddenPackages", "Hidden packages", flags.hiddenPackages)}
+            ${listField("lockTaskPackages", "Lock-task packages", flags.lockTaskPackages)}
+            <label class="field">Required packages, one name per line
+              <textarea id="required" class="short" spellcheck="false">${esc((configured.requiredPackages || []).map((pkg) => pkg.packageName).join("\n"))}</textarea>
+            </label>
+            <h3>Required apps on last report</h3>
+            <table>
+              <thead><tr><th>Required</th><th>Last report</th></tr></thead>
+              <tbody>${requiredRows || `<tr><td colspan="2">No packages required</td></tr>`}</tbody>
+            </table>
+            <p class="meta">Queued commands run on every check-in until removed: ${esc((configured.commands || []).map((cmd) => cmd.type).join(", ") || "none")}.</p>
+            <div class="actions">
+              <button id="save-desired" type="button">Save as device override</button>
+              <button id="clear-desired" class="danger" type="button">Clear override</button>
+            </div>
+            <p class="error"></p>
+            <details>
+              <summary>Raw desired-state JSON</summary>
+              <textarea id="desired" spellcheck="false">${esc(JSON.stringify(configured, null, 2))}</textarea>
+              <div class="actions"><button id="save-json" type="button">Save raw JSON as override</button></div>
+            </details>
+          </div>
+        </div>`;
       document.getElementById("save-group").onclick = async () => {
         try {
           await api("/api/devices/" + encodeURIComponent(id) + "/group", {
@@ -223,11 +331,21 @@
       };
       document.getElementById("save-desired").onclick = async () => {
         try {
-          const parsed = JSON.parse(document.getElementById("desired").value);
           await api("/api/devices/" + encodeURIComponent(id) + "/desired", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(parsed),
+            body: JSON.stringify(readConfigured(configured)),
+          });
+          await refresh();
+          await openDevice(id);
+        } catch (err) { showError(err); }
+      };
+      document.getElementById("save-json").onclick = async () => {
+        try {
+          await api("/api/devices/" + encodeURIComponent(id) + "/desired", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(JSON.parse(document.getElementById("desired").value)),
           });
           await refresh();
           await openDevice(id);
