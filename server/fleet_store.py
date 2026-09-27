@@ -204,6 +204,28 @@ class FleetStore:
             for row in rows
         ]
 
+    def get_group(self, name: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT name, desired_json, updated_at FROM groups WHERE name = ?",
+                (name,),
+            ).fetchone()
+            if row is None:
+                return None
+            devices = [
+                item[0]
+                for item in self._conn.execute(
+                    "SELECT device_id FROM device_groups WHERE group_name = ? ORDER BY device_id",
+                    (name,),
+                )
+            ]
+        return {
+            "name": row["name"],
+            "updatedAt": row["updated_at"],
+            "desired": json.loads(row["desired_json"]),
+            "deviceIds": devices,
+        }
+
     def set_desired(self, device_id: str, desired: dict[str, Any]) -> None:
         if not device_id:
             raise ValueError("device id is required")

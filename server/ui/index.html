@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GrapheneOS MDM fleet</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101114;
+      --panel: #181b20;
+      --panel-2: #20242b;
+      --line: #31363f;
+      --text: #e8eee9;
+      --muted: #8f9a93;
+      --ok: #8fceab;
+      --warn: #e3c27a;
+      --bad: #e39494;
+      --accent: #9fd7c2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: baseline;
+      padding: 20px 28px 8px;
+    }
+    h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: 0.01em; }
+    header p { margin: 0; color: var(--muted); font-size: 13px; }
+    nav { display: flex; gap: 8px; padding: 8px 28px 16px; }
+    button, select, textarea, input {
+      font: inherit;
+      color: var(--text);
+      background: var(--panel-2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    button { padding: 7px 12px; cursor: pointer; }
+    button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+    button.danger { color: var(--bad); }
+    main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 0 28px 32px; }
+    @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .list { padding: 8px; }
+    .row {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: grid;
+      gap: 2px;
+    }
+    .row:hover, .row.active { background: var(--panel-2); }
+    .row strong { font-family: ui-monospace, monospace; font-size: 13px; font-weight: 600; }
+    .meta { color: var(--muted); font-size: 12px; }
+    .detail { padding: 18px 20px 24px; }
+    .detail h2 { margin: 0 0 4px; font-size: 16px; font-family: ui-monospace, monospace; }
+    dl { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; margin: 14px 0; }
+    dt { color: var(--muted); }
+    dd { margin: 0; }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 1px 8px;
+      font-size: 12px;
+      border: 1px solid var(--line);
+    }
+    .muted { color: var(--muted); }
+    .ok { color: var(--ok); border-color: #2f5b45; }
+    .warn { color: var(--warn); border-color: #6a5728; }
+    .bad { color: var(--bad); border-color: #6a3030; }
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      padding: 10px;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+    .error { color: var(--bad); font-size: 13px; min-height: 1.2em; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-weight: 500; }
+    .empty { color: var(--muted); padding: 28px 16px; }
+    label { color: var(--muted); font-size: 13px; }
+    select, input[type="text"] { padding: 7px 10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>GrapheneOS MDM</h1>
+    <p>Lab fleet on this machine. Phones still check in over mutual TLS.</p>
+  </header>
+  <nav>
+    <button id="tab-devices" type="button" aria-pressed="true">Devices</button>
+    <button id="tab-groups" type="button" aria-pressed="false">Groups</button>
+  </nav>
+  <main>
+    <section class="list" id="list"></section>
+    <section class="detail" id="detail"></section>
+  </main>
+  <script>
+    const listEl = document.getElementById("list");
+    const detailEl = document.getElementById("detail");
+    const tabDevices = document.getElementById("tab-devices");
+    const tabGroups = document.getElementById("tab-groups");
+    let mode = "devices";
+    let selected = null;
+    let groups = [];
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
+      }[ch]));
+    }
+
+    function pill(status) {
+      const value = status || "none";
+      const kind = value === "ok" ? "ok" : value === "none" || value === "missing" ? "muted" : "bad";
+      return `<span class="pill ${kind}">${value}</span>`;
+    }
+
+    async function api(path, options) {
+      const response = await fetch(path, options);
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || response.statusText);
+      return body;
+    }
+
+    function showError(err) {
+      const node = detailEl.querySelector(".error");
+      if (node) node.textContent = err.message || String(err);
+    }
+
+    async function loadDevices() {
+      const data = await api("/api/devices");
+      groups = (await api("/api/groups")).groups;
+      if (!data.devices.length) {
+        listEl.innerHTML = `<p class="empty">No phone has checked in yet. The list fills after a mutual-TLS check-in against this database.</p>`;
+        if (!selected) {
+          detailEl.innerHTML = `<p class="empty">Create a group on the Groups tab if you want a shared desired state waiting for the first device.</p>`;
+        }
+        return;
+      }
+      listEl.innerHTML = data.devices.map((device) => `
+        <button class="row ${device.deviceId === selected ? "active" : ""}" type="button" data-id="${device.deviceId}">
+          <strong>${esc(device.deviceId)}</strong>
+          <span class="meta">${esc(device.group || "no group")} · ${device.packageCount} packages · ${pill(device.attestationStatus)}</span>
+          <span class="meta">${device.osVersion || "?"} · patch ${device.securityPatch || "?"} · ${device.lastCheckinAt}</span>
+        </button>`).join("");
+      listEl.querySelectorAll(".row").forEach((row) => {
+        row.addEventListener("click", () => openDevice(row.dataset.id));
+      });
+      if (!selected && data.devices[0]) await openDevice(data.devices[0].deviceId);
+    }
+
+    async function openDevice(id) {
+      selected = id;
+      mode = "devices";
+      setTabs();
+      const device = await api("/api/devices/" + encodeURIComponent(id));
+      const inventory = device.inventory || {};
+      const location = inventory.location;
+      const packages = inventory.installedPackages || [];
+      const groupOptions = [`<option value="">No group</option>`]
+        .concat(groups.map((group) => `<option value="${esc(group.name)}" ${group.name === device.group ? "selected" : ""}>${esc(group.name)}</option>`))
+        .join("");
+      const editor = JSON.stringify(device.desiredOverride || device.resolvedDesired, null, 2);
+      detailEl.innerHTML = `
+        <h2>${esc(device.deviceId)}</h2>
+        <p class="meta">Certificate ${device.clientCn} · source of desired state: ${device.desiredSource}</p>
+        <dl>
+          <dt>Last check-in</dt><dd>${device.lastCheckinAt}</dd>
+          <dt>Attestation</dt><dd>${pill(device.attestationStatus)} ${device.verifiedBootState || ""}</dd>
+          <dt>OS</dt><dd>${inventory.osVersion || "?"} · ${inventory.securityPatch || "?"}</dd>
+          <dt>Location</dt><dd>${location ? `${location.latitude}, ${location.longitude} (${location.provider || "unknown"})` : "not reported"}</dd>
+          <dt>Users</dt><dd>${(inventory.users || []).map((user) => user.serial + (user.secondary ? " secondary" : "")).join(", ") || "not reported"}</dd>
+        </dl>
+        <label>Group</label>
+        <div class="actions">
+          <select id="group">${groupOptions}</select>
+          <button id="save-group" type="button">Save group</button>
+        </div>
+        <h3>Desired state</h3>
+        <p class="meta">Showing the ${device.desiredSource} policy. Save stores a copy as this device's override. Clear returns to the group, then the server default. A wipe command in this JSON runs on the phone's next check-in.</p>
+        <textarea id="desired" spellcheck="false">${editor.replace(/</g, "&lt;")}</textarea>
+        <div class="actions">
+          <button id="save-desired" type="button">Save override</button>
+          <button id="clear-desired" class="danger" type="button">Clear override</button>
+        </div>
+        <p class="error"></p>
+        <h3>Installed packages</h3>
+        <table>
+          <thead><tr><th>Package</th><th>Version</th></tr></thead>
+          <tbody>
+            ${packages.map((pkg) => `<tr><td>${esc(pkg.packageName)}</td><td>${esc(pkg.versionName || "")}</td></tr>`).join("") || `<tr><td colspan="2">None reported</td></tr>`}
+          </tbody>
+        </table>`;
+      document.getElementById("save-group").onclick = async () => {
+        try {
+          await api("/api/devices/" + encodeURIComponent(id) + "/group", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ group: document.getElementById("group").value || null }),
+          });
+          await refresh();
+          await openDevice(id);
+        } catch (err) { showError(err); }
+      };
+      document.getElementById("save-desired").onclick = async () => {
+        try {
+          const parsed = JSON.parse(document.getElementById("desired").value);
+          await api("/api/devices/" + encodeURIComponent(id) + "/desired", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(parsed),
+          });
+          await refresh();
+          await openDevice(id);
+        } catch (err) { showError(err); }
+      };
+      document.getElementById("clear-desired").onclick = async () => {
+        try {
+          await api("/api/devices/" + encodeURIComponent(id) + "/desired", { method: "DELETE" });
+          await refresh();
+          await openDevice(id);
+        } catch (err) { showError(err); }
+      };
+      await loadDevices();
+    }
+
+    async function loadGroups() {
+      groups = (await api("/api/groups")).groups;
+      listEl.innerHTML = groups.map((group) => `
+        <button class="row ${group.name === selected ? "active" : ""}" type="button" data-group="${group.name}">
+          <strong>${esc(group.name)}</strong>
+          <span class="meta">${group.deviceCount} devices · ${group.updatedAt}</span>
+        </button>`).join("") || `<p class="empty">No groups yet.</p>`;
+      listEl.querySelectorAll(".row").forEach((row) => {
+        row.addEventListener("click", () => openGroup(row.dataset.group));
+      });
+      if (!selected) {
+        detailEl.innerHTML = groupForm();
+        bindNewGroup();
+      }
+    }
+
+    function groupForm(existing) {
+      const name = existing ? existing.name : "";
+      const body = existing ? JSON.stringify(existing.desired, null, 2) : `{
+  "schemaVersion": 1,
+  "requiredPackages": [],
+  "policyFlags": {}
+}`;
+      return `
+        <h2>${existing ? name : "New group"}</h2>
+        <p class="meta">${existing ? (existing.deviceIds || []).join(", ") || "No devices assigned" : "The file equivalent of ansible/group_vars."}</p>
+        ${existing ? "" : `<div class="actions"><label>Name</label><input id="new-name" type="text" placeholder="pixels"></div>`}
+        <textarea id="group-json" spellcheck="false">${body.replace(/</g, "&lt;")}</textarea>
+        <div class="actions">
+          <button id="save-group-json" type="button">${existing ? "Save group" : "Create group"}</button>
+          ${existing ? `<button id="delete-group" class="danger" type="button">Delete group</button>` : ""}
+        </div>
+        <p class="error"></p>`;
+    }
+
+    function bindNewGroup() {
+      document.getElementById("save-group-json").onclick = async () => {
+        try {
+          const name = document.getElementById("new-name").value.trim();
+          const parsed = JSON.parse(document.getElementById("group-json").value);
+          await api("/api/groups/" + encodeURIComponent(name), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(parsed),
+          });
+          selected = name;
+          await refresh();
+        } catch (err) { showError(err); }
+      };
+    }
+
+    async function openGroup(name) {
+      selected = name;
+      const group = await api("/api/groups/" + encodeURIComponent(name));
+      detailEl.innerHTML = groupForm(group);
+      document.getElementById("save-group-json").onclick = async () => {
+        try {
+          const parsed = JSON.parse(document.getElementById("group-json").value);
+          await api("/api/groups/" + encodeURIComponent(name), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(parsed),
+          });
+          await refresh();
+        } catch (err) { showError(err); }
+      };
+      document.getElementById("delete-group").onclick = async () => {
+        try {
+          await api("/api/groups/" + encodeURIComponent(name), { method: "DELETE" });
+          selected = null;
+          await refresh();
+        } catch (err) { showError(err); }
+      };
+      await loadGroups();
+    }
+
+    function setTabs() {
+      tabDevices.setAttribute("aria-pressed", mode === "devices" ? "true" : "false");
+      tabGroups.setAttribute("aria-pressed", mode === "groups" ? "true" : "false");
+    }
+
+    async function refresh() {
+      if (mode === "devices") await loadDevices();
+      else await loadGroups();
+    }
+
+    tabDevices.onclick = async () => { mode = "devices"; selected = null; setTabs(); await loadDevices(); };
+    tabGroups.onclick = async () => { mode = "groups"; selected = null; setTabs(); await loadGroups(); };
+    loadDevices().catch((err) => { detailEl.innerHTML = `<p class="error">${err.message}</p>`; });
+  </script>
+</body>
+</html>
