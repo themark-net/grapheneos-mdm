@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "requiredPackages": [
+    {
+      "packageName": "net.themark.grapheneosmdm",
+      "apkUrl": "/v1/catalog/grapheneosmdm.apk"
+    }
+  ],
+  "policyFlags": {
+    "disallowAddUser": true,
+    "disallowInstallUnknownSources": true
+  }
+}
