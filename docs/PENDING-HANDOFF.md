@@ -1,8 +1,27 @@
 # Pending handoff
 
-Continuation note for the next harness. Issue **#28** is merged. Open work is issue **#30** on `feat/issue-30-provisioning-qr`: a real provisioning QR and `serverBaseUrl` from that QR. Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner, so issue **#8** stays a wizard gap even if the GitHub issue was closed.
+Continuation note for the next harness. Issue **#30** is merged. Issue **#8** stays closed (do not reopen). Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner — upstream gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40). There is no open product feature work on this tip beyond that upstream park.
 
-Written 2026-09-25. Issues #12, #13, #14, #18, #21, #24, #26, and #28 are closed.
+Written 2026-09-27. Issues #12, #13, #14, #18, #21, #24, #26, #28, and #30 are closed. #8 stays closed.
+
+## Shipped: issue #30 — PR #31
+
+Squash `dbaa2d05e1b89db5a11679678e11d4da6cde4ff0` (was head `eb53c69`).
+
+`server/provisioning_qr.py` writes an AOSP Device Owner provisioning payload for this agent:
+
+- component `net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver`
+- HTTPS APK URL
+- URL-safe SHA-256 of the APK signing certificate, padding stripped
+- `PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED`
+- optional Wi-Fi
+- `PROVISIONING_ADMIN_EXTRAS_BUNDLE.serverBaseUrl`
+
+Pass `--png` when `qrencode` is installed.
+
+During provisioning the agent saves `serverBaseUrl` and schedules a check-in. `lab_checkin.py --publish-apk --publish-port 8444` serves that APK at `/dpc.apk` with no client certificate. Check-in on 8443 stays mTLS.
+
+Stock GrapheneOS SetupWizard still has no 6-tap scanner. Use ADB device-owner steps in `docs/ENROLLMENT.md` until upstream ships the wizard. The QR is for a phone whose wizard does launch ManagedProvisioning; the download URL must be HTTPS signed by a CA the device already trusts during setup (lab CA is not in that trust store).
 
 ## Shipped: issue #28 — PR #29
 
@@ -25,7 +44,7 @@ The check-in still returns desired state when attestation fails. The result is o
 
 Squash `cb09cfb9fdb8604772bbae19abd836a5c569a04c` (was head `2212c55`).
 
-Does not close #8. The provisioning activities are in place; stock GrapheneOS SetupWizard still has no 6-tap scanner.
+Provisioning activities are in place; stock GrapheneOS SetupWizard still has no 6-tap scanner (#8 stays closed; upstream SetupWizard2 PR #40).
 
 - **Attestation.** Lab check-in may return `attestationChallenge` (32 random bytes, base64). The next inventory uses an Android Keystore key bound to that nonce: `attestation.format=keymint`, `payloadB64` is the concatenated DER chain (leaf first), and `verifiedBootState` is `Verified`, `SelfSigned`, `Unverified`, or `Failed` when the attestation extension contains root-of-trust. No challenge keeps `format=none`.
 - **Preferred activities.** `persistentPreferredActivities` is the full set this agent manages. Omit leaves them alone. Empty clears only packages this agent previously set.
@@ -58,12 +77,12 @@ Omit `passwordComplexity`, `maximumTimeToLockMs`, `suspendedPackages`, or `hidde
 | | |
 | --- | --- |
 | Branch | `main` |
-| SHA | `5dc98c1` |
-| Subject | Fleet groups and key-attestation check (#29) |
+| SHA | `dbaa2d0` |
+| Subject | Provisioning QR payload and server URL from the QR (#31) |
 
 ## 2. What shipped
 
-Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24/#26/#28.
+Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24/#26/#28/#30.
 
 ### PR #17 — clear user restrictions — Fixes #14
 
@@ -99,13 +118,17 @@ Squash `cb09cfb9fdb8604772bbae19abd836a5c569a04c`.
 
 Squash `5dc98c188cc9f06d5f828e497cb1b0dc72a6202d`.
 
+### PR #31 — provisioning QR + server URL from QR — Fixes #30
+
+Squash `dbaa2d05e1b89db5a11679678e11d4da6cde4ff0`.
+
 Earlier commits still on this tip, outside this stack: WorkManager scheduling (#11, issue #5), desired-apps enforce (#10, issue #4), mTLS check-in (#9, issue #3), and the enrollment guide (#7).
 
 ## 3. Open posture
 
 GrapheneOS MDM stays **software-only**. There is no device-demo park unless the founder says otherwise.
 
-[#8](https://github.com/themark-net/grapheneos-mdm/issues/8) (DPC provisioning-mode activities after the GrapheneOS QR wizard ships) stays parked in [docs/ENROLLMENT.md](ENROLLMENT.md), [docs/MTLS.md](MTLS.md), and [docs/SCHEDULING.md](SCHEDULING.md).
+Wizard gap (not a themark-net issue to reopen): stock GrapheneOS SetupWizard has no 6-tap scanner. Track upstream [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40). Issue #8 stays closed. Enrollment docs cover ADB Device Owner until that lands.
 
 ## 4. Freezes
 
@@ -114,7 +137,7 @@ GrapheneOS MDM stays **software-only**. There is no device-demo park unless the 
 
 ## 5. Docs that still apply
 
-- [docs/ENROLLMENT.md](ENROLLMENT.md) — ADB Device Owner enrollment on a clean Pixel, including safety notes. QR / Managed Provisioning is not a supported path.
+- [docs/ENROLLMENT.md](ENROLLMENT.md) — ADB Device Owner enrollment on a clean Pixel, including safety notes. QR / Managed Provisioning needs a wizard that launches it.
 - [docs/MTLS.md](MTLS.md) — mTLS check-in, lab `--db`, and fleet CA alignment.
 - [docs/SCHEDULING.md](SCHEDULING.md) — WorkManager periodic check-in and the force / `checkin_now` path.
 - [DESIGN.md](../DESIGN.md) — architecture. Lab `--db` and `minSecurityPatch` reporting are already noted there.
