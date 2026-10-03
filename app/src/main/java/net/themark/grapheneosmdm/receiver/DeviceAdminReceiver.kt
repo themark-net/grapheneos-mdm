@@ -49,6 +49,12 @@ class DeviceAdminReceiver : DeviceAdminReceiver() {
         private const val TAG = "DeviceAdminReceiver"
 
         fun getComponentName(context: Context): ComponentName =
-            ComponentName(context.applicationContext, DeviceAdminReceiver::class.java)
+            // The android.app.admin.DeviceAdminReceiver import shadows this
+            // class. DeviceAdminReceiver::class in the companion is the
+            // framework class, and DevicePolicyManager rejects that admin.
+            ComponentName(
+                context.applicationContext,
+                net.themark.grapheneosmdm.receiver.DeviceAdminReceiver::class.java,
+            )
     }
 }

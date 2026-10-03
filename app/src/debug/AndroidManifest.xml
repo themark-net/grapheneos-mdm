@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Debug lab hook only. Not present in release. Not a settings screen. -->
+    <application>
+        <receiver
+            android:name=".lab.LabServerConfigReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="net.themark.grapheneosmdm.action.SET_LAB_SERVER" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

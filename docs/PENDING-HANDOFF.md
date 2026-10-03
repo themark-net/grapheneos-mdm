@@ -18,6 +18,69 @@ How this can fail, and the recovery already in the slice:
 - The fixture has not run. The empty-state copy remains, because nothing seeds the database at server start.
 - The fixture fails to insert. `server/tests/test_host_sim_checkin.py` runs `lab_checkin.py --db --simulate` and fails when the fleet store list does not show `host-sim`.
 
+## Operated: issue #36 — Android emulator device-owner (not merged)
+
+This is an **AOSP ATD** emulator (`system-images;android-35;aosp_atd;x86_64`), not GrapheneOS. Fingerprint observed: `Android/sdk_slim_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys`. Model: `Android ATD built for x86_64`. It does not prove attestation, verified boot, or the 6-tap SetupWizard. Issue #8 stays closed.
+
+Script: [scripts/emulator-device-owner.sh](../scripts/emulator-device-owner.sh). Procedure: [docs/EMULATOR.md](EMULATOR.md). No new screen. The debug APK's `LabServerConfigReceiver` sets `serverBaseUrl` from an adb shell broadcast. Release builds do not include it.
+
+### Device owner
+
+`adb -s emulator-5574 shell dpm set-device-owner net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver` (exit 0):
+
+```
+Success: Device owner set to package net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver
+Active admin set to component net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver
+```
+
+A later run of that same command exits 255 with `device owner (net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver) is already set`. After that run:
+
+```
+$ adb -s emulator-5574 shell dpm list-owners
+1 owner:
+User  0: admin=net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver,DeviceOwner,Affiliated
+```
+
+```
+$ adb -s emulator-5574 shell dumpsys device_policy
+  Device Owner:
+    admin=ComponentInfo{net.themark.grapheneosmdm/net.themark.grapheneosmdm.receiver.DeviceAdminReceiver}
+    package=net.themark.grapheneosmdm
+    net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver:
+```
+
+### Check-in
+
+Lab server on `127.0.0.1:8443` (mTLS). `adb -s emulator-5574 reverse tcp:8443 tcp:8443`. Guest URL `https://127.0.0.1:8443`. Not `10.0.2.2` (the lab certificate SAN is only `localhost` and `127.0.0.1`).
+
+```
+127.0.0.1 - check-in deviceId=a7fdb4548155d650 packages=73 client=lab-device-01 attestation=challenge_mismatch
+127.0.0.1 - "POST /v1/checkin HTTP/1.1" 200 -
+```
+
+```
+I LabServerConfig: lab server base URL saved
+D CheckInRunner: Check-in complete status=ok
+I LabServerConfig: lab-checkin outcome=SUCCESS
+```
+
+`fleet_store.py --db … list`:
+
+```
+deviceId a7fdb4548155d650
+clientCn lab-device-01
+osVersion 15
+model Android ATD built for x86_64
+isDeviceOwner true
+attestationStatus challenge_mismatch
+verifiedBootState null
+lastCheckinAt 2026-10-03T04:25:26Z
+```
+
+`challenge_mismatch` is not a verified-boot result. An earlier probe on this same emulator stored an attestation nonce in the app. This script's sqlite file was new, so the key the device presented did not match a challenge this server had issued. `verifiedBootState` is null. Do not read this row as attestation success.
+
+The operate script exited 0.
+
 ## Shipped: localhost fleet operator page — PR #34
 
 Squash `49a16c82964e4f35fdffd5c3cb7545728cdaa5cd` (was head `8277328`).
@@ -184,6 +247,7 @@ Wizard gap (not a themark-net issue to reopen): stock GrapheneOS SetupWizard has
 ## 5. Docs that still apply
 
 - [docs/ENROLLMENT.md](ENROLLMENT.md) — ADB Device Owner enrollment on a clean Pixel, including safety notes. QR / Managed Provisioning needs a wizard that launches it.
+- [docs/EMULATOR.md](EMULATOR.md) — Android emulator device-owner for this agent (AOSP ATD, not GrapheneOS). Issue #36. Does not prove attestation, verified boot, or the 6-tap SetupWizard. Issue #8 stays closed.
 - [docs/MTLS.md](MTLS.md) — mTLS check-in, lab `--db`, and fleet CA alignment.
 - [docs/SCHEDULING.md](SCHEDULING.md) — WorkManager periodic check-in and the force / `checkin_now` path.
 - [docs/design/](design/) — fleet operator journey, wireframes, and the wipe-gate handoff.

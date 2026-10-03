@@ -20,4 +20,5 @@ No tautological or implementation-detail unit sprawl as Done.
 ```bash
 ./gradlew :app:assembleDebug
 # prefer protocol/server tests and software-only checks over live device demos
+# Issue #36 emulator bench (AOSP ATD, not GrapheneOS): scripts/emulator-device-owner.sh
 ```

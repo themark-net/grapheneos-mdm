@@ -39,6 +39,8 @@ WorkManager scheduling (#5). Stack through clear-restrictions, fleet store, and 
 
 **Enrollment today**: ADB `dpm set-device-owner` (QR / zero-touch not yet reliable on stock GrapheneOS SetupWizard).
 
+**Android emulator (issue #36):** [docs/EMULATOR.md](docs/EMULATOR.md) installs this agent as device owner on an AOSP ATD emulator. That image is not GrapheneOS. The run does not claim attestation, verified boot, or the 6-tap SetupWizard. Issue #8 stays closed.
+
 Step-by-step (clean Pixel, ADB, QR investigation, golden-image notes, and safety): **[docs/ENROLLMENT.md](docs/ENROLLMENT.md)**.
 
 See [DESIGN.md](DESIGN.md) for architecture and open design decisions.
