@@ -34,6 +34,11 @@ and returns `desired-state.example.json`. Pass `--db` to record inventory and
 apply a per-device desired-state override. Generate throwaway certs with
 `server/gen-lab-certs.sh`, or point both sides at PEMs from step-ca.
 
+The lab server certificate from that script names only `DNS:localhost` and
+`IP:127.0.0.1`. An Android emulator must call `https://127.0.0.1:8443` through
+`adb reverse tcp:8443 tcp:8443`. `10.0.2.2` fails the hostname check. That
+bench is an AOSP emulator, not GrapheneOS. See [EMULATOR.md](EMULATOR.md).
+
 ## Fleet CA / step-ca / Ansible alignment
 
 This repo does **not** embed step-ca. Fleet practice lives in

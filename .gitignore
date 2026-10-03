@@ -37,3 +37,12 @@ __pycache__/
 # Lab fleet sqlite (created by lab_checkin.py --db)
 *.sqlite
 *.sqlite3
+
+# Android SDK, system images, and AVDs (issue #36). Never commit.
+# The bench SDK lives outside this worktree; these names still refuse a copy.
+tmp/android-sdk/
+android-sdk/
+*.avd/
+system-images/
+*.img
+emulator-*.pid

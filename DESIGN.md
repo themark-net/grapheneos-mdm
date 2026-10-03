@@ -35,6 +35,10 @@ Operator-facing steps, QR investigation, golden-image notes, and safety: **[docs
 2. Skip all accounts / setup where possible; enable developer options + USB debugging.
 3. `adb install` + `adb shell dpm set-device-owner net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver`
 
+### Emulator bench (issue #36, not GrapheneOS)
+
+[docs/EMULATOR.md](docs/EMULATOR.md) and `scripts/emulator-device-owner.sh` install this same debug APK as device owner on an AOSP ATD Android 15 emulator (`aosp_atd`, not a GrapheneOS image and not a Play image). The guest reaches the lab mTLS port through `adb reverse` to `127.0.0.1:8443` because the lab certificate SAN does not include `10.0.2.2`. A debug-only shell broadcast sets `serverBaseUrl`. There is no new screen. This path does not prove attestation, verified boot, or the 6-tap SetupWizard. Issue #8 stays closed.
+
 ### Desired (future - not available on stock GrapheneOS today)
 
 - QR-code provisioning during SetupWizard. GrapheneOS SetupWizard2 still lacks a shipped 6-tap / Managed Provisioning path. Upstream work lives in [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40) (open, needs cleanup / current-branch work) and [PR #48](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/48) (closed, not merged). When a release actually lands, this DPC will still need `ACTION_GET_PROVISIONING_MODE` and `ACTION_ADMIN_POLICY_COMPLIANCE` handlers before a custom QR can succeed.

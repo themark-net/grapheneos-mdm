@@ -7,6 +7,7 @@ This document is the enrollment guide for **this** agent:
 - Declared in `app/src/main/AndroidManifest.xml` (`android:exported="true"`, `BIND_DEVICE_ADMIN`)
 
 **Supported path today:** ADB `dpm set-device-owner` on a clean Pixel running GrapheneOS.
+**Android emulator (not GrapheneOS):** [EMULATOR.md](EMULATOR.md) is a separate bench. The image is AOSP ATD (Android 15), not a GrapheneOS build. It does not prove attestation, verified boot, or the 6-tap SetupWizard. Issue #8 stays closed.
 **QR payload:** [section 2](#2-qr-provisioning) builds a standards provisioning QR and the agent applies `serverBaseUrl` from it. Stock GrapheneOS SetupWizard still does not open a scanner.
 
 Read the [safety notes](#safety-notes-read-before-you-set-device-owner) before the last ADB command.

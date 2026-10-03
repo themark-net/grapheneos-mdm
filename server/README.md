@@ -79,6 +79,10 @@ On the agent: copy `ca.pem` + `client.p12` into the app-private `mtls/` dir
 (or import into Android Keystore alias `grapheneos_mdm_client`), and set the
 server base URL via `SecureConfigStore` (e.g. `https://10.42.0.x:8443`).
 
+An Android emulator is not GrapheneOS. The lab certificate SAN is only
+`localhost` and `127.0.0.1`, so the guest uses `adb reverse` and
+`https://127.0.0.1:8443`. See [docs/EMULATOR.md](../docs/EMULATOR.md).
+
 ## Out of scope (parked)
 
 - QR enrollment wizard (#8)
