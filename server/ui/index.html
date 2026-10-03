@@ -347,8 +347,8 @@
       listEl.innerHTML = data.devices.map((device) => `
         <button class="row ${device.deviceId === selected ? "active" : ""}" type="button" data-id="${device.deviceId}">
           <strong>${esc(device.deviceId)}</strong>
-          <span class="meta">${esc(device.group || "no group")} · ${device.packageCount} packages · ${pill(device.attestationStatus)}</span>
-          <span class="meta">${device.osVersion || "?"} · patch ${device.securityPatch || "?"} · ${device.lastCheckinAt}</span>
+          <span class="meta">${esc(device.group || "no group")} · ${device.packageCount} packages · ${device.simulated ? `<span class="pill warn">simulated</span>` : pill(device.attestationStatus)}</span>
+          <span class="meta">${device.osVersion || "?"} · patch ${device.securityPatch || "?"} · ${device.simulated ? "recorded " + device.lastCheckinAt + " · not a mutual-TLS check-in" : device.lastCheckinAt}</span>
         </button>`).join("");
       listEl.querySelectorAll(".row").forEach((row) => {
         row.addEventListener("click", () => openDevice(row.dataset.id));
@@ -437,6 +437,15 @@
       const groupOptions = [`<option value="">No group</option>`]
         .concat(groups.map((group) => `<option value="${esc(group.name)}" ${group.name === device.group ? "selected" : ""}>${esc(group.name)}</option>`))
         .join("");
+      const identity = device.simulated
+        ? "Simulated host inventory. Not a mutual-TLS check-in. Recorded " + (device.lastCheckinAt || "") + ". Configuration from " + (device.desiredSource || "") + "."
+        : "Certificate " + (device.clientCn || "") + " · last check-in " + (device.lastCheckinAt || "") + " · configuration from " + (device.desiredSource || "");
+      const reportedNote = device.simulated
+        ? "Read-only. Posted by the host fixture. No phone sent this inventory."
+        : "Read-only. This is the last inventory the phone sent. Nothing here changes the device.";
+      const attestationCell = device.simulated
+        ? "simulated"
+        : pill(device.attestationStatus) + " " + esc(device.verifiedBootState || inventory.attestation && inventory.attestation.verifiedBootState || "");
       const complexity = flags.passwordComplexity || "";
       const requiredRows = (configured.requiredPackages || []).map((pkg) => {
         const present = installed.has(pkg.packageName);
@@ -444,17 +453,17 @@
       }).join("");
       detailEl.innerHTML = `
         <h2>${esc(device.deviceId)}</h2>
-        <p class="meta">Certificate ${esc(device.clientCn)} · last check-in ${esc(device.lastCheckinAt)} · configuration from ${esc(device.desiredSource)}</p>
+        <p class="meta">${esc(identity)}</p>
         <div class="split">
           <div>
             <p class="kicker">Reported</p>
-            <p class="meta">Read-only. This is the last inventory the phone sent. Nothing here changes the device.</p>
+            <p class="meta">${esc(reportedNote)}</p>
             <dl>
               <dt>Model</dt><dd>${esc(inventory.model || "not reported")}</dd>
               <dt>OS</dt><dd>${esc(inventory.osVersion || "?")} · patch ${esc(inventory.securityPatch || "?")}</dd>
               <dt>Patch meets policy</dt><dd>${inventory.securityPatchOk === true ? "yes" : inventory.securityPatchOk === false ? "no" : "not reported"}</dd>
               <dt>Device owner</dt><dd>${inventory.isDeviceOwner === true ? "yes" : inventory.isDeviceOwner === false ? "no" : "not reported"}</dd>
-              <dt>Attestation</dt><dd>${pill(device.attestationStatus)} ${esc(device.verifiedBootState || inventory.attestation && inventory.attestation.verifiedBootState || "")}</dd>
+              <dt>Attestation</dt><dd>${attestationCell}</dd>
               <dt>Location</dt><dd>${location ? esc(location.latitude + ", " + location.longitude + " (" + (location.provider || "unknown") + ")") : "not reported"}</dd>
               <dt>Users</dt><dd>${esc((inventory.users || []).map((user) => user.serial + (user.secondary ? " secondary" : "")).join(", ") || "not reported")}</dd>
               <dt>OS updater</dt><dd>${updater ? esc((updater.installed ? "installed" : "not installed") + (updater.versionName ? " " + updater.versionName : "") + (updater.enabled === false ? ", disabled" : "")) : "not reported"}</dd>

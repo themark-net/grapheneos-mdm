@@ -150,6 +150,8 @@ class LabCheckInTest(unittest.TestCase):
         self.assertIn("device-default", stored)
         self.assertFalse(stored["device-default"]["hasOverride"])
         self.assertTrue(stored["device-override"]["hasOverride"])
+        self.assertFalse(stored["device-default"]["simulated"])
+        self.assertFalse(stored["device-override"]["simulated"])
 
     def test_rejects_without_client_cert(self) -> None:
         ctx = ssl.create_default_context(cafile=str(self.certs / "ca.pem"))

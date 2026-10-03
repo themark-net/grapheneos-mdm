@@ -11,6 +11,13 @@ per-device desired-state override when one has been set (see fleet_store.py).
 Optional --publish-apk / --publish-port serves that APK at https://HOST:PORT/dpc.apk
 with no client certificate, for a provisioning QR download. Check-in stays mTLS.
 
+Host-only simulated inventory (no phone, no client certificate, no emulator):
+
+  python3 lab_checkin.py --db fleet.sqlite --simulate
+
+That writes one row and exits. It does not open the check-in port. The listening
+server still requires a client certificate.
+
 Usage:
   ./gen-lab-certs.sh
   python3 lab_checkin.py --certs ./lab-certs --port 8443 \\
@@ -48,6 +55,45 @@ from fleet_store import FleetStore  # noqa: E402
 SCHEMA_VERSION = 1
 CHECKIN_PATHS = {"/v1/checkin", "/checkin"}
 CATALOG_PREFIX = "/v1/catalog/"
+HOST_SIM_DEVICE_ID = "host-sim"
+
+
+def host_sim_inventory() -> dict[str, Any]:
+    """One inventory posted by --simulate. Not a phone report."""
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "deviceId": HOST_SIM_DEVICE_ID,
+        "osVersion": "host-fixture",
+        "securityPatch": "1970-01-01",
+        "model": "host-sim",
+        "isDeviceOwner": False,
+        "installedPackages": [
+            {"packageName": "net.themark.grapheneosmdm", "versionName": "0.0.0-sim"}
+        ],
+        "attestation": {"format": "none"},
+    }
+
+
+def simulate_checkin(db_path: str | None) -> int:
+    """Write one simulated inventory into db_path and return. Does not open a port."""
+    if not db_path:
+        print("host-sim fixture needs --db", file=sys.stderr)
+        return 2
+    store = FleetStore(db_path)
+    try:
+        store.record_checkin(
+            HOST_SIM_DEVICE_ID,
+            "host-sim",
+            host_sim_inventory(),
+            simulated=True,
+        )
+    finally:
+        store.close()
+    print(
+        f"simulated inventory recorded deviceId={HOST_SIM_DEVICE_ID} db={db_path}",
+        flush=True,
+    )
+    return 0
 
 
 def default_desired() -> dict[str, Any]:
@@ -252,7 +298,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-tokens", action="store_true")
     parser.add_argument("--publish-apk", default=None, help="APK served at /dpc.apk without client auth")
     parser.add_argument("--publish-port", type=int, default=8444)
+    parser.add_argument(
+        "--simulate",
+        action="store_true",
+        help="write one host-only simulated inventory into --db and exit; does not open the mTLS port",
+    )
     args = parser.parse_args(argv)
+    if args.simulate:
+        return simulate_checkin(args.db or os.environ.get("MDM_DB"))
 
     certs = Path(args.certs or __import__("os").environ.get("MDM_LAB_CERTS", "lab-certs"))
     desired_path = Path(

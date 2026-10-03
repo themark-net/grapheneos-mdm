@@ -4,6 +4,20 @@ Continuation note for the next harness. PR **#34** (localhost fleet operator pag
 
 Written 2026-09-27. Issues #12, #13, #14, #18, #21, #24, #26, #28, #30, and #32 are closed. PR #34 is closed/merged. #8 stays closed.
 
+## This slice: host-only simulated check-in — issue #35
+
+Branch `bot/host-sim-checkin-35`. Not merged. No phone checked in. Software-only.
+
+`python3 lab_checkin.py --db fleet.sqlite --simulate` writes one inventory row into that sqlite and exits. No phone, no ADB, no emulator, and no client certificate. The command does not open a port. Check-in on the listening server still requires mutual TLS.
+
+`ui_server.py` on 127.0.0.1:8787 lists that row on the existing device list. The row label is simulated. The detail calls it a simulated host inventory. Wipe status copy is unchanged: queued, still present, or absent. The page does not say the device was wiped. `ui_server.py` does not insert a device when it starts. Until the fixture runs, the empty-state copy stays: "No phone has checked in yet. The list fills after a mutual-TLS check-in against this database."
+
+How this can fail, and the recovery already in the slice:
+
+- The fixture writes a row the page treats as a real mutual-TLS check-in or as wiped. The row is stored with `simulated=1`, attestation fields cleared, and the existing device row shows the simulated label. Wipe copy is untouched.
+- The fixture has not run. The empty-state copy remains, because nothing seeds the database at server start.
+- The fixture fails to insert. `server/tests/test_host_sim_checkin.py` runs `lab_checkin.py --db --simulate` and fails when the fleet store list does not show `host-sim`.
+
 ## Shipped: localhost fleet operator page — PR #34
 
 Squash `49a16c82964e4f35fdffd5c3cb7545728cdaa5cd` (was head `8277328`).
@@ -156,7 +170,9 @@ Earlier commits still on this tip, outside this stack: WorkManager scheduling (#
 
 ## 3. Open posture
 
-GrapheneOS MDM stays **software-only**. There is no device-demo park unless the founder says otherwise. No open feature PR on this tip.
+GrapheneOS MDM stays **software-only**. There is no device-demo park unless the founder says otherwise.
+
+Issue **#35** is implemented on branch `bot/host-sim-checkin-35` (host-only simulated inventory, not merged). No phone checked in. Issue #8 stays closed.
 
 Wizard gap (not a themark-net issue to reopen): stock GrapheneOS SetupWizard has no 6-tap scanner. Track upstream [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40). Issue #8 stays closed. Enrollment docs cover ADB Device Owner until that lands.
 
@@ -180,5 +196,6 @@ Wizard gap (not a themark-net issue to reopen): stock GrapheneOS SetupWizard has
 Use the procedures already written in those docs. This note does not add device steps.
 
 - Host lab loop: [server/README.md](../server/README.md) (`gen-lab-certs.sh`, `lab_checkin.py --db`, `fleet_store.py`, `ui_server.py` on 127.0.0.1:8787, curl smoke against `/v1/checkin`).
+- Host-only simulated row (issue #35): `python3 lab_checkin.py --db fleet.sqlite --simulate`, then `ui_server.py` on 127.0.0.1:8787. The row is labeled simulated. Skip the fixture and the empty-state copy stays.
 - Agent certificates and server base URL: [docs/MTLS.md](MTLS.md).
 - Enrollment on a device that is already in an approved lab: [docs/ENROLLMENT.md](ENROLLMENT.md) only.
