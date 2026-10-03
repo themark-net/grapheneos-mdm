@@ -79,6 +79,7 @@ class FleetStore:
         self._ensure_column("devices", "attestation_status", "TEXT")
         self._ensure_column("devices", "verified_boot_state", "TEXT")
         self._ensure_column("devices", "pending_challenge", "TEXT")
+        self._ensure_column("devices", "simulated", "INTEGER NOT NULL DEFAULT 0")
         self._conn.commit()
 
     def _ensure_column(self, table: str, name: str, decl: str) -> None:
@@ -90,21 +91,40 @@ class FleetStore:
         with self._lock:
             self._conn.close()
 
-    def record_checkin(self, device_id: str, client_cn: str, inventory: dict[str, Any]) -> None:
+    def record_checkin(
+        self,
+        device_id: str,
+        client_cn: str,
+        inventory: dict[str, Any],
+        *,
+        simulated: bool = False,
+    ) -> None:
         device_id = device_id or "unknown"
         payload = json.dumps(inventory, separators=(",", ":"), sort_keys=True)
         now = utcnow()
+        # simulated=1 clears attestation fields. A real check-in (0) must keep
+        # pending_challenge so observe_attestation still sees the prior nonce.
+        flag = 1 if simulated else 0
         with self._lock:
             self._conn.execute(
                 """
-                INSERT INTO devices (device_id, client_cn, last_checkin_at, inventory_json)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO devices (
+                  device_id, client_cn, last_checkin_at, inventory_json, simulated
+                )
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(device_id) DO UPDATE SET
                   client_cn = excluded.client_cn,
                   last_checkin_at = excluded.last_checkin_at,
-                  inventory_json = excluded.inventory_json
+                  inventory_json = excluded.inventory_json,
+                  simulated = excluded.simulated,
+                  attestation_status = CASE
+                    WHEN excluded.simulated = 1 THEN NULL ELSE attestation_status END,
+                  verified_boot_state = CASE
+                    WHEN excluded.simulated = 1 THEN NULL ELSE verified_boot_state END,
+                  pending_challenge = CASE
+                    WHEN excluded.simulated = 1 THEN NULL ELSE pending_challenge END
                 """,
-                (device_id, client_cn or "unknown", now, payload),
+                (device_id, client_cn or "unknown", now, payload, flag),
             )
             self._conn.commit()
 
@@ -257,7 +277,7 @@ class FleetStore:
             rows = self._conn.execute(
                 """
                 SELECT d.device_id, d.client_cn, d.last_checkin_at, d.inventory_json,
-                       d.attestation_status, d.verified_boot_state,
+                       d.attestation_status, d.verified_boot_state, d.simulated,
                        o.desired_json IS NOT NULL AS has_override,
                        g.group_name
                 FROM devices d
@@ -282,6 +302,7 @@ class FleetStore:
                     "group": row["group_name"],
                     "attestationStatus": row["attestation_status"],
                     "verifiedBootState": row["verified_boot_state"],
+                    "simulated": bool(row["simulated"]),
                 }
             )
         return listed
@@ -291,7 +312,7 @@ class FleetStore:
             row = self._conn.execute(
                 """
                 SELECT d.device_id, d.client_cn, d.last_checkin_at, d.inventory_json,
-                       d.attestation_status, d.verified_boot_state,
+                       d.attestation_status, d.verified_boot_state, d.simulated,
                        o.desired_json, o.updated_at AS desired_updated_at,
                        g.group_name, grp.updated_at AS group_updated_at
                 FROM devices d
@@ -316,6 +337,7 @@ class FleetStore:
             "group": row["group_name"],
             "attestationStatus": row["attestation_status"],
             "verifiedBootState": row["verified_boot_state"],
+            "simulated": bool(row["simulated"]),
         }
 
     def pending_challenge(self, device_id: str) -> str | None:
