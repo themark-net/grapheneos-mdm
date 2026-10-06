@@ -1,70 +1,36 @@
 # Pending handoff
 
-Continuation note for the next harness. PR **#34** (localhost fleet operator page) is merged. Issue **#8** stays closed (do not reopen). Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner — upstream gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
+Continuation note for the next harness. Read [docs/ROADMAP.md](ROADMAP.md) for the next slice. Issue **#8** stays closed. Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner. That gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
 
-Written 2026-09-27. Issues #12, #13, #14, #18, #21, #24, #26, #28, #30, and #32 are closed. PR #34 is closed/merged. #8 stays closed.
+Written 2026-10-06. Tip below matches `main`.
 
-## This slice: host-only simulated check-in — issue #35
+## 1. Tip
 
-Branch `bot/host-sim-checkin-35`. Not merged. No phone checked in. Software-only.
+| | |
+| --- | --- |
+| Branch | `main` |
+| SHA | `b5fd229` (`b5fd229f86326b7c428365c8f49b6fb218a6d002`) |
+| Subject | Android emulator device-owner for the MDM agent (#38) |
 
-`python3 lab_checkin.py --db fleet.sqlite --simulate` writes one inventory row into that sqlite and exits. No phone, no ADB, no emulator, and no client certificate. The command does not open a port. Check-in on the listening server still requires mutual TLS.
+`49a16c8` is PR #34 (localhost fleet operator page), an ancestor of this tip.
 
-`ui_server.py` on 127.0.0.1:8787 lists that row on the existing device list. The row label is simulated. The detail calls it a simulated host inventory. Wipe status copy is unchanged: queued, still present, or absent. The page does not say the device was wiped. `ui_server.py` does not insert a device when it starts. Until the fixture runs, the empty-state copy stays: "No phone has checked in yet. The list fills after a mutual-TLS check-in against this database."
+## 2. Shipped on this tip
 
-How this can fail, and the recovery already in the slice:
+### Host-only simulated check-in — issue #35, PR #37
 
-- The fixture writes a row the page treats as a real mutual-TLS check-in or as wiped. The row is stored with `simulated=1`, attestation fields cleared, and the existing device row shows the simulated label. Wipe copy is untouched.
-- The fixture has not run. The empty-state copy remains, because nothing seeds the database at server start.
-- The fixture fails to insert. `server/tests/test_host_sim_checkin.py` runs `lab_checkin.py --db --simulate` and fails when the fleet store list does not show `host-sim`.
+Squash `38d12fa7aa806cba5c9b2e4e2733ae76b143f6ac`. Merged 2026-10-03.
 
-## Operated: issue #36 — Android emulator device-owner (not merged)
+`python3 lab_checkin.py --db fleet.sqlite --simulate` writes one inventory row and exits. No phone, no ADB, no emulator, no client certificate, and no listening port. The row is stored with `simulated=1`. `ui_server.py` on 127.0.0.1:8787 labels it simulated. Wipe copy is unchanged. The server does not seed a device at start. Mutual-TLS check-in on the listening server is unchanged.
 
-This is an **AOSP ATD** emulator (`system-images;android-35;aosp_atd;x86_64`), not GrapheneOS. Fingerprint observed: `Android/sdk_slim_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys`. Model: `Android ATD built for x86_64`. It does not prove attestation, verified boot, or the 6-tap SetupWizard. Issue #8 stays closed.
+### Android emulator device-owner — issue #36, PR #38
 
-Script: [scripts/emulator-device-owner.sh](../scripts/emulator-device-owner.sh). Procedure: [docs/EMULATOR.md](EMULATOR.md). No new screen. The debug APK's `LabServerConfigReceiver` sets `serverBaseUrl` from an adb shell broadcast. Release builds do not include it.
+Squash `b5fd229f86326b7c428365c8f49b6fb218a6d002`. Merged 2026-10-03. This is the tip.
 
-### Device owner
+The image is AOSP ATD `system-images;android-35;aosp_atd;x86_64`, fingerprint `Android/sdk_slim_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys`, model `Android ATD built for x86_64`. It is not GrapheneOS and not a Pixel. It does not prove attestation, verified boot, or the 6-tap SetupWizard. Issue #8 stays closed.
 
-`adb -s emulator-5574 shell dpm set-device-owner net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver` (exit 0):
+Script: [scripts/emulator-device-owner.sh](../scripts/emulator-device-owner.sh). Procedure: [docs/EMULATOR.md](EMULATOR.md). Device owner is `net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver`. The guest reaches the lab mTLS port through `adb reverse` to `https://127.0.0.1:8443` (certificate SAN is `localhost` and `127.0.0.1` only). Debug-only `LabServerConfigReceiver` sets `serverBaseUrl`. Release builds omit it. Desired state for that run has an empty package list and no policy flags.
 
-```
-Success: Device owner set to package net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver
-Active admin set to component net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver
-```
-
-A later run of that same command exits 255 with `device owner (net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver) is already set`. After that run:
-
-```
-$ adb -s emulator-5574 shell dpm list-owners
-1 owner:
-User  0: admin=net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver,DeviceOwner,Affiliated
-```
-
-```
-$ adb -s emulator-5574 shell dumpsys device_policy
-  Device Owner:
-    admin=ComponentInfo{net.themark.grapheneosmdm/net.themark.grapheneosmdm.receiver.DeviceAdminReceiver}
-    package=net.themark.grapheneosmdm
-    net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver:
-```
-
-### Check-in
-
-Lab server on `127.0.0.1:8443` (mTLS). `adb -s emulator-5574 reverse tcp:8443 tcp:8443`. Guest URL `https://127.0.0.1:8443`. Not `10.0.2.2` (the lab certificate SAN is only `localhost` and `127.0.0.1`).
-
-```
-127.0.0.1 - check-in deviceId=a7fdb4548155d650 packages=73 client=lab-device-01 attestation=challenge_mismatch
-127.0.0.1 - "POST /v1/checkin HTTP/1.1" 200 -
-```
-
-```
-I LabServerConfig: lab server base URL saved
-D CheckInRunner: Check-in complete status=ok
-I LabServerConfig: lab-checkin outcome=SUCCESS
-```
-
-`fleet_store.py --db … list`:
+The operate script exited 0. The stored row was:
 
 ```
 deviceId a7fdb4548155d650
@@ -77,189 +43,69 @@ verifiedBootState null
 lastCheckinAt 2026-10-03T04:25:26Z
 ```
 
-`challenge_mismatch` is not a verified-boot result. An earlier probe on this same emulator stored an attestation nonce in the app. This script's sqlite file was new, so the key the device presented did not match a challenge this server had issued. `verifiedBootState` is null. Do not read this row as attestation success.
-
-The operate script exited 0.
-
-## Shipped: localhost fleet operator page — PR #34
-
-Squash `49a16c82964e4f35fdffd5c3cb7545728cdaa5cd` (was head `8277328`).
-
-`server/ui_server.py` serves a page on 127.0.0.1:8787 for the lab sqlite file. It lists devices and groups, assigns a group, and edits desired state. `FleetStore.get_group` backs the group detail. Check-in stays on the mutual-TLS port. The page refuses to bind outside localhost.
-
-Wipe is a Danger-zone control, not a JSON note. **Wipe device…** and any Save that would persist `commands` with `type: "wipe"` open a type-to-confirm modal (device id, or group name plus the member list). Cancel writes nothing. After a successful queue the status strip says "Wipe queued — runs on next check-in." The page does not report the device as wiped. Delete group asks for the group name. Design pack: [docs/design/](design/) (`README.md` + `10`–`14`).
-
-An empty database shows empty-state copy ("No phone has checked in yet"). This slice does not insert a sample device.
-
-Software-only. No device-demo.
-
-## Shipped: issue #32 — PR #33
-
-Squash `47523f98e81265603b095832891a7102262d128c` (was head `c62030f`).
-
-`ansible/group_vars/<group>.json` is the desired-state document the agent already accepts. JSON is valid Ansible group_vars, so this does not add a YAML parser.
-
-`ansible/inventory/hosts.ini` lists device ids under `[group]`. `server/ansible_sync.py` writes each file with `set-group-desired` and assigns each device with `set-group`. A device listed in two groups is an error, because the store keeps one group per device. `:vars` and `:children` sections are ignored.
-
-A per-device override from `fleet_store.py set-desired` still wins over the group. This PR does not change the agent.
-
-## Shipped: issue #30 — PR #31
-
-Squash `dbaa2d05e1b89db5a11679678e11d4da6cde4ff0` (was head `eb53c69`).
-
-`server/provisioning_qr.py` writes an AOSP Device Owner provisioning payload for this agent:
-
-- component `net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver`
-- HTTPS APK URL
-- URL-safe SHA-256 of the APK signing certificate, padding stripped
-- `PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED`
-- optional Wi-Fi
-- `PROVISIONING_ADMIN_EXTRAS_BUNDLE.serverBaseUrl`
-
-Pass `--png` when `qrencode` is installed.
-
-During provisioning the agent saves `serverBaseUrl` and schedules a check-in. `lab_checkin.py --publish-apk --publish-port 8444` serves that APK at `/dpc.apk` with no client certificate. Check-in on 8443 stays mTLS.
-
-Stock GrapheneOS SetupWizard still has no 6-tap scanner. Use ADB device-owner steps in `docs/ENROLLMENT.md` until upstream ships the wizard. The QR is for a phone whose wizard does launch ManagedProvisioning; the download URL must be HTTPS signed by a CA the device already trusts during setup (lab CA is not in that trust store).
-
-## Shipped: issue #28 — PR #29
-
-Squash `5dc98c188cc9f06d5f828e497cb1b0dc72a6202d` (was head `b333ff6`).
-
-With `--db`, desired state for a device is its own override, else its group's desired state, else the `--desired` file.
-
-`fleet_store.py` adds `set-group`, `clear-group`, `set-group-desired`, `clear-group-desired`, and `list-groups`. `list` and `show` include the group and the attestation status.
-
-Each check-in response still carries `attestationChallenge`, and that nonce is stored for the device. On the next inventory:
-
-- `format=none` and no prior challenge is `none`.
-- `format=none` after a challenge was issued is `missing`.
-- `keymint` must carry that challenge in the attestation extension and chain to a vendored Google attestation root. Expiry is not checked, because factory attestation keys that chain to that root stay trusted after `notAfter`.
-- Status `ok` also requires `verifiedBootState` `Verified`. Other boot states are `boot_unverified`. A bad challenge is `challenge_mismatch`. A chain that does not sign to the Google root is `chain_invalid`.
-
-The check-in still returns desired state when attestation fails. The result is on the device row. This PR does not change the agent.
-
-## Shipped: issue #26 — PR #27
-
-Squash `cb09cfb9fdb8604772bbae19abd836a5c569a04c` (was head `2212c55`).
-
-Provisioning activities are in place; stock GrapheneOS SetupWizard still has no 6-tap scanner (#8 stays closed; upstream SetupWizard2 PR #40).
-
-- **Attestation.** Lab check-in may return `attestationChallenge` (32 random bytes, base64). The next inventory uses an Android Keystore key bound to that nonce: `attestation.format=keymint`, `payloadB64` is the concatenated DER chain (leaf first), and `verifiedBootState` is `Verified`, `SelfSigned`, `Unverified`, or `Failed` when the attestation extension contains root-of-trust. No challenge keeps `format=none`.
-- **Preferred activities.** `persistentPreferredActivities` is the full set this agent manages. Omit leaves them alone. Empty clears only packages this agent previously set.
-- **Profiles.** Inventory `users` lists the calling user serial and `getSecondaryUsers` serials. `disallowUserSwitch` uses the same true/false/omit rule as the other restrictions. This does not create or delete users. Silent install stays on the system user.
-- **Updater.** Inventory `osUpdater` reports `app.seamlessupdate.client`. Command `check_os_update` unhides that package and starts `android.settings.SYSTEM_UPDATE_SETTINGS`. The updater service is not exported, and its settings activity requires a signature permission, so this agent does not download the OTA itself.
-- **QR handlers.** `GET_PROVISIONING_MODE` returns fully-managed when that mode is allowed, and cancels when the wizard offers only a work profile. `ADMIN_POLICY_COMPLIANCE` returns OK.
-
-## Shipped: issue #24 — PR #25
-
-Squash `fba9f9f87089e0ede86b48390cb97910cf6c55d2` (was head `7b71755`).
-
-`policyFlags.locationEnabled` turns the location radio on and the next inventory includes a location fix. The agent grants itself coarse, fine, and background location. While the radio is on it also grants GrapheneOS `android.permission.OTHER_SENSORS` when that permission exists. A fresh GNSS fix beats a fresh network fix; a fresh network fix beats a stale GNSS pin; otherwise wait up to 8s for one GPS update, then newest cached. `false` turns the radio off and stops reporting. Omit leaves the radio alone. `usbDataSignalingEnabled`, `disallowConfigWifi`, and `disallowConfigMobileNetworks` use the same add/clear/omit rule as other flags.
-
-## Shipped: issue #21
-
-`policyFlags.permissionGrants` is the full set of runtime permission overrides for other apps (`granted` / `denied` / `default`). Omit the list to leave grants alone. An entry that drops off is reset to `default`. A reset that fails stays recorded so the next check-in retries it. The agent package is ignored.
-
-## Shipped: PR #20 — Fixes #18
-
-Password complexity, lock timeout, suspend/hide, and uninstall of packages this agent installed.
-
-- `setRequiredPasswordComplexity(complexity)` is the API 31 method. It takes the complexity int only. `setMaximumTimeToLock(admin, lockMs)` still takes the admin component.
-- A package that fails to unsuspend or unhide stays in the persisted set so the next check-in retries it.
-- The agent package is never suspended, hidden, or uninstalled. Uninstall runs only for packages this agent installed, after the PackageInstaller result.
-
-Omit `passwordComplexity`, `maximumTimeToLockMs`, `suspendedPackages`, or `hiddenPackages` to leave that device setting alone. `passwordComplexity` is `none` / `low` / `medium` / `high`. `none` clears the requirement. `maximumTimeToLockMs` of `0` clears the timeout.
-
-## 1. Tip
-
-| | |
-| --- | --- |
-| Branch | `main` |
-| SHA | `49a16c8` |
-| Subject | Localhost fleet operator page (#34) |
-
-## 2. What shipped
-
-Recent squash merges on this tip, oldest first in the earlier stack, then #21/#24/#26/#28/#30/#32/#34.
-
-### PR #17 — clear user restrictions — Fixes #14
-
-Squash `aed4ece43119895c5cb91390f088aabb2b1a4b89`.
-
-For `disallowAddUser`, `disallowFactoryReset`, and `disallowInstallUnknownSources`: `true` adds the user restriction, `false` clears it, and a null or omitted flag leaves the device setting alone.
-
-### PR #16 — persist lab inventory and per-device desired state — Fixes #12
-
-Squash `5e515ef603204b1e1f11cb1b8f7b41718ab29582`.
-
-Optional `--db` sqlite on the lab check-in server stores the last inventory per device and serves a per-device desired-state override. Without `--db`, every device still receives the default desired-state file and inventory is only logged. The operator CLI is `server/fleet_store.py` (`list`, `show`, `set-desired`, `clear-desired`), already shown in [server/README.md](../server/README.md).
-
-### PR #15 — minimum security-patch floor — Fixes #13
-
-Squash `61685f827974275556cfa37531f5ed1e013acb19`.
-
-Desired state may set `policyFlags.minSecurityPatch` as `YYYY-MM-DD`. The agent compares that date to `Build.VERSION.SECURITY_PATCH`, logs when the device patch is older, and reports `securityPatchOk` on the next inventory. It does not drive the GrapheneOS updater and it does not wipe the device. Schema fields live in [protocol/desired-state.schema.json](../protocol/desired-state.schema.json) and [protocol/inventory-report.schema.json](../protocol/inventory-report.schema.json).
-
-### PR #22 — permission grants — Fixes #21
-
-Squash `b0b79aeb1cabc1a41ebb53bcc41709a088688f03`.
-
-### PR #25 — lost-device GPS — Fixes #24
-
-Squash `fba9f9f87089e0ede86b48390cb97910cf6c55d2`.
-
-### PR #27 — attestation / preferred activities / profiles / updater / QR — Fixes #26
-
-Squash `cb09cfb9fdb8604772bbae19abd836a5c569a04c`.
-
-### PR #29 — fleet groups + key-attestation check — Fixes #28
-
-Squash `5dc98c188cc9f06d5f828e497cb1b0dc72a6202d`.
-
-### PR #31 — provisioning QR + server URL from QR — Fixes #30
-
-Squash `dbaa2d05e1b89db5a11679678e11d4da6cde4ff0`.
-
-### PR #33 — Ansible group_vars onto fleet groups — Fixes #32
-
-Squash `47523f98e81265603b095832891a7102262d128c`.
-
-### PR #34 — localhost fleet operator page
-
-Squash `49a16c82964e4f35fdffd5c3cb7545728cdaa5cd`.
-
-Earlier commits still on this tip, outside this stack: WorkManager scheduling (#11, issue #5), desired-apps enforce (#10, issue #4), mTLS check-in (#9, issue #3), and the enrollment guide (#7).
+`challenge_mismatch` is not attestation success. The server compares a keymint chain to the challenge it stored on the previous check-in (`pending_challenge`), then issues a new nonce for the next inventory. That run used a new sqlite file. The app still held a nonce from an earlier probe, so the key did not match a challenge this database had issued. `verifiedBootState` is null. `ok` requires a chain to the vendored Google root in `server/attestation-roots.pem` and `verifiedBootState` `Verified`.
+
+### Earlier squash merges
+
+One line each. Longer notes for these are in the commit subjects and the docs linked in section 5.
+
+| Squash | PR | What |
+| --- | --- | --- |
+| `49a16c82964e4f35fdffd5c3cb7545728cdaa5cd` | #34 | Localhost operator page on 127.0.0.1:8787. Wipe is type-to-confirm. Empty DB stays empty. |
+| `47523f98e81265603b095832891a7102262d128c` | #33 | `ansible/group_vars/<group>.json` applied with `ansible_sync.py`. Fixes #32. |
+| `dbaa2d05e1b89db5a11679678e11d4da6cde4ff0` | #31 | Provisioning QR payload and `serverBaseUrl` from the QR. Fixes #30. |
+| `5dc98c188cc9f06d5f828e497cb1b0dc72a6202d` | #29 | Fleet groups and key-attestation check. Fixes #28. |
+| `cb09cfb9fdb8604772bbae19abd836a5c569a04c` | #27 | Attestation, preferred activities, profiles, updater check, QR handlers. Fixes #26. |
+| `fba9f9f87089e0ede86b48390cb97910cf6c55d2` | #25 | GPS fix for lost-device recovery. Fixes #24. |
+| `b0b79aeb1cabc1a41ebb53bcc41709a088688f03` | #22 | Runtime permission grants. Fixes #21. |
+| `00283d27b036a5c531f00063225948e6364ad0aa` | #20 | Password rule, hide/suspend, uninstall of packages this agent installed. Fixes #18. |
+| `aed4ece43119895c5cb91390f088aabb2b1a4b89` | #17 | `false` clears `disallowAddUser`, `disallowFactoryReset`, `disallowInstallUnknownSources`. Fixes #14. |
+| `5e515ef603204b1e1f11cb1b8f7b41718ab29582` | #16 | Lab sqlite inventory and per-device desired state. Fixes #12. |
+| `61685f827974275556cfa37531f5ed1e013acb19` | #15 | `minSecurityPatch` report. The agent does not drive the updater or wipe. Fixes #13. |
+| `5ff09571dbf5127c0b5df04f0d5216d24a8025c0` | #11 | WorkManager check-in. Fixes #5. |
+| `bf42e41a624b4971521c80e451a74acae40a4eb1` | #10 | Catalog install and desired-apps enforce. Fixes #4. |
+| `c3641a7b5e42e7930b70132aed94e442cc3e0fd5` | #9 | mTLS `ApiClient` and lab check-in. Fixes #3. |
+| `e78c0aa357acf8f9e3df062502ea0b4d73cd46cc` | #7 | Enrollment guide. |
 
 ## 3. Open posture
 
-GrapheneOS MDM stays **software-only**. There is no device-demo park unless the founder says otherwise.
+Feature GO, set by the founder on 2026-10-02. New slices are allowed. A device-demo path is allowed when the org can run it without the founder.
 
-Issue **#35** is implemented on branch `bot/host-sim-checkin-35` (host-only simulated inventory, not merged). No phone checked in. Issue #8 stays closed.
+Host-only work and the AOSP emulator bench are org-can-do. A physical Pixel and real GrapheneOS enrollment stay founder-only. He holds the hardware.
 
-Wizard gap (not a themark-net issue to reopen): stock GrapheneOS SetupWizard has no 6-tap scanner. Track upstream [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40). Issue #8 stays closed. Enrollment docs cover ADB Device Owner until that lands.
+Issue #8 stays closed. The wizard gap is upstream SetupWizard2 PR #40, unchanged. Enrollment until that lands is ADB `dpm set-device-owner`, documented in [docs/ENROLLMENT.md](ENROLLMENT.md).
 
-## 4. Freezes
+The open issue list is empty. The only open pull request is the founder's draft **#42** (`founder-build-babysit/2026-10-05`). It is not the next slice. Leave it untouched.
 
-- Device demo work is frozen.
-- A new feature release stays frozen until the founder asks for one.
+The next slice is Phase 3 in [docs/ROADMAP.md](ROADMAP.md): a second emulator check-in against the same sqlite, so attestation status is computed from a challenge that database issued.
+
+## 4. Boundaries
+
+These are the standing limits. Feature work and emulator demos are not frozen.
+
+- Physical Pixel, real GrapheneOS, fleet CA credentials, license, and a production control plane are founder-needed.
+- Issue #8 stays closed. Do not reopen it and do not implement the 6-tap scanner in this repo.
+- Draft PR #42 stays as the founder left it.
+- The operator page stays on localhost. The lab server stays the mTLS check-in path.
+- An AOSP ATD result is not a GrapheneOS enroll and is not attestation success.
 
 ## 5. Docs that still apply
 
-- [docs/ENROLLMENT.md](ENROLLMENT.md) — ADB Device Owner enrollment on a clean Pixel, including safety notes. QR / Managed Provisioning needs a wizard that launches it.
-- [docs/EMULATOR.md](EMULATOR.md) — Android emulator device-owner for this agent (AOSP ATD, not GrapheneOS). Issue #36. Does not prove attestation, verified boot, or the 6-tap SetupWizard. Issue #8 stays closed.
-- [docs/MTLS.md](MTLS.md) — mTLS check-in, lab `--db`, and fleet CA alignment.
-- [docs/SCHEDULING.md](SCHEDULING.md) — WorkManager periodic check-in and the force / `checkin_now` path.
-- [docs/design/](design/) — fleet operator journey, wireframes, and the wipe-gate handoff.
-- [DESIGN.md](../DESIGN.md) — architecture. Lab `--db`, the localhost operator page, and `minSecurityPatch` reporting are already noted there.
-- [server/README.md](../server/README.md) — lab check-in quick start, `fleet_store.py`, and the localhost operator page.
-- [protocol/](../protocol/) — desired-state and inventory JSON schemas.
+- [docs/ROADMAP.md](ROADMAP.md) — phases, the next slice, and its definition of done.
+- [docs/ENROLLMENT.md](ENROLLMENT.md) — ADB Device Owner on a clean Pixel. QR needs a wizard that launches ManagedProvisioning.
+- [docs/EMULATOR.md](EMULATOR.md) — AOSP ATD device-owner bench. Issue #36, shipped in #38.
+- [docs/MTLS.md](MTLS.md) — mTLS check-in, lab `--db`, fleet CA alignment.
+- [docs/SCHEDULING.md](SCHEDULING.md) — WorkManager periodic check-in and `checkin_now`.
+- [docs/design/](design/) — operator journey, wireframes, wipe gate.
+- [DESIGN.md](../DESIGN.md) — architecture. Production control plane is still external.
+- [server/README.md](../server/README.md) — lab check-in, `fleet_store.py`, operator page, `--simulate`.
+- [protocol/](../protocol/) — desired-state and inventory schemas.
 
 ## 6. Dogfood
 
-Use the procedures already written in those docs. This note does not add device steps.
+Use the procedures in those docs.
 
-- Host lab loop: [server/README.md](../server/README.md) (`gen-lab-certs.sh`, `lab_checkin.py --db`, `fleet_store.py`, `ui_server.py` on 127.0.0.1:8787, curl smoke against `/v1/checkin`).
-- Host-only simulated row (issue #35): `python3 lab_checkin.py --db fleet.sqlite --simulate`, then `ui_server.py` on 127.0.0.1:8787. The row is labeled simulated. Skip the fixture and the empty-state copy stays.
-- Agent certificates and server base URL: [docs/MTLS.md](MTLS.md).
-- Enrollment on a device that is already in an approved lab: [docs/ENROLLMENT.md](ENROLLMENT.md) only.
+- Host lab loop: [server/README.md](../server/README.md).
+- Simulated row (shipped #35/#37): `python3 lab_checkin.py --db fleet.sqlite --simulate`, then `ui_server.py` on 127.0.0.1:8787.
+- Emulator bench (shipped #36/#38): [scripts/emulator-device-owner.sh](../scripts/emulator-device-owner.sh). Read `challenge_mismatch` and null `verifiedBootState` as the caveat in section 2, not as a pass on attestation.
+- Pixel enrollment, when the founder is at the hardware: [docs/ENROLLMENT.md](ENROLLMENT.md).
