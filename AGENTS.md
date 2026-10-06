@@ -22,5 +22,6 @@ No tautological or implementation-detail unit sprawl as Done.
 ./gradlew :app:assembleDebug
 # prefer protocol/server tests and software-only checks over live device demos
 # Emulator bench shipped #36/#38 (AOSP ATD, not GrapheneOS): scripts/emulator-device-owner.sh
-# Next slice is docs/ROADMAP.md Phase 3 (same-database attestation round-trip)
+# Phase 3 same-database attestation: scripts/emulator-same-db-attestation.sh
+# Next slice is docs/ROADMAP.md Phase 4 (emulator policy on the operator page)
 ```

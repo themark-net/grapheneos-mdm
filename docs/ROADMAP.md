@@ -27,40 +27,29 @@ Exit: a host command can insert one labeled simulated row, and an AOSP ATD emula
 | | |
 | --- | --- |
 | #35 / PR #37 | Host-only `--simulate`. Squash `38d12fa7aa806cba5c9b2e4e2733ae76b143f6ac`. |
-| #36 / PR #38 | Emulator device owner. Squash `b5fd229f86326b7c428365c8f49b6fb218a6d002`. Tip of `main`. |
+| #36 / PR #38 | Emulator device owner. Squash `b5fd229f86326b7c428365c8f49b6fb218a6d002`. |
 
-The emulator check-in row was `attestationStatus challenge_mismatch` and `verifiedBootState` null. That is the open hole Phase 3 closes. See [docs/PENDING-HANDOFF.md](PENDING-HANDOFF.md).
+The #38 check-in row was `attestationStatus challenge_mismatch` and `verifiedBootState` null. One check-in against a new sqlite cannot match: the nonce arrives in the response, and that run also left a previous nonce in the app. Phase 3 is the second check-in against the database that issued the nonce.
 
-## Next slice — Phase 3 — Same-database emulator attestation
+### Phase 3 — Same-database emulator attestation
 
-**org-can-do.** No founder, no Pixel, no GrapheneOS image.
+**org-can-do.** Implemented on this branch. Still not Feature GO. A physical Pixel and a GrapheneOS image stay founder-only.
 
-The server stores `attestationChallenge` as `pending_challenge` and checks it on the next inventory (`FleetStore.observe_attestation`, then `issue_challenge`). The agent binds the next keystore key to that nonce (`KeyAttestor` replaces alias `grapheneos_mdm_attest` when the nonce changes). One check-in against a new sqlite cannot match: the nonce arrives in the response. The #38 script also left a previous nonce in the app, so the presented key did not belong to this database.
+Script: [scripts/emulator-same-db-attestation.sh](../scripts/emulator-same-db-attestation.sh). Procedure: [docs/EMULATOR.md](EMULATOR.md). A new sqlite, `pm clear` of `net.themark.grapheneosmdm` after removing the test-only device owner, then two check-ins. The second lab line is the record. The script exits non-zero when that observation is missing or when `attestationStatus` is `challenge_mismatch`, `none`, `missing`, `parse_error`, or `unsupported`.
 
-### Definition of done
+`ok` still means the chain trusts `server/attestation-roots.pem` and `verifiedBootState` is `Verified`. The 2026-10-06 bench run on `userdebug` / `test-keys` printed second-check-in `attestationStatus chain_invalid` and `verifiedBootState` null. That is the server record. `boot_unverified` is a record only when that chain check passed and boot is not `Verified`. The success line quotes the status. It does not call verified boot passed unless the status is `ok`. The full row is in [docs/EMULATOR.md](EMULATOR.md) and [docs/PENDING-HANDOFF.md](PENDING-HANDOFF.md).
 
-One operate script on the existing AOSP ATD bench (`system-images;android-35;aosp_atd;x86_64`, AVD `mdm36`). A failure exits non-zero and prints the command output.
+Out of this phase, still: operator page, policy flags, CI, GrapheneOS, issue #8.
 
-1. New sqlite file for the run.
-2. Clear the app attestation state before the first check-in (`pm clear` of `net.themark.grapheneosmdm`, or an equivalent that drops `attestation_challenge_next` and the keystore alias). A leftover key is a failure of the setup, not a result.
-3. Two check-ins to that same database. The second inventory is the one that must carry the first response's challenge.
-4. Exit non-zero when the second `fleet_store` row is missing, or when its `attestationStatus` is `challenge_mismatch`, `none`, `missing`, `parse_error`, or `unsupported`.
-5. Print `attestationStatus` and `verifiedBootState` for the second row. Those fields are the record. The success line quotes that status. It does not call the image GrapheneOS, and it does not call verified boot passed unless the status is `ok`.
-6. `ok` is the server result only when the chain trusts `server/attestation-roots.pem` and `verifiedBootState` is `Verified`. On this `userdebug` / `test-keys` image the chain check runs before the boot check, so the likely status is `chain_invalid`. `boot_unverified` is an acceptable record only when that chain check passed and boot is not `Verified`. Null `verifiedBootState` can still appear on either status.
+## Next slice — Phase 4 — Emulator policy on the operator page
 
-Out of this slice: operator page, policy flags, CI, GrapheneOS, issue #8.
+**org-can-do.** Assumes Phase 3 has landed, so a later log is not another `challenge_mismatch` row from a fresh sqlite.
 
-## Later
-
-Ordered by value after Phase 3. Each item is independent enough to schedule, and each assumes Phase 3 has landed so a later log is not another `challenge_mismatch` row.
-
-### Phase 4 — Emulator policy on the operator page
-
-**org-can-do.**
-
-`scripts/emulator-device-owner.sh` currently serves `policyFlags: {}` and a `noop` command, and it does not start `ui_server.py`. The agent already applies `policyFlags.disallowAddUser` through `UserManager.DISALLOW_ADD_USER`.
+`scripts/emulator-device-owner.sh` serves `policyFlags: {}` and a `noop` command, and it does not start `ui_server.py`. The Phase 3 script does the same. The agent already applies `policyFlags.disallowAddUser` through `UserManager.DISALLOW_ADD_USER`.
 
 Definition of done: one script, same AOSP ATD bench, exits non-zero on a missing step. Desired state sets `disallowAddUser` true and does not name a catalog APK (the example APK is a placeholder and a hash mismatch looks like an install failure). After check-in, `dumpsys device_policy` shows that restriction. `ui_server.py` on 127.0.0.1:8787 against that sqlite lists the device id. The script log is the walkthrough record (enroll, check-in, operator list, restriction). No wipe command. No claim that the image is GrapheneOS.
+
+## Later
 
 ### Phase 5 — Run the operate script on a KVM runner
 
