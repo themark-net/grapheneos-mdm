@@ -11,7 +11,9 @@ This bench runs **this agent** on a normal Android emulator. It is **not** Graph
 
 Issue #8 stays closed. Stock GrapheneOS SetupWizard still has no scanner. That gap is unchanged. Do not read a successful emulator check-in as a GrapheneOS enroll.
 
-The operate script is [scripts/emulator-device-owner.sh](../scripts/emulator-device-owner.sh). It builds the debug APK, installs it, sets device owner, and records the lab check-in. A failure exits non-zero and prints the command output. It does not insert a fake device row.
+The device-owner script is [scripts/emulator-device-owner.sh](../scripts/emulator-device-owner.sh). It builds the debug APK, installs it, sets device owner, and records one lab check-in. A failure exits non-zero and prints the command output. It does not insert a fake device row.
+
+The same-database attestation script is [scripts/emulator-same-db-attestation.sh](../scripts/emulator-same-db-attestation.sh). It is Phase 3. Details are in [Same-database attestation](#same-database-attestation-phase-3).
 
 ## SDK
 
@@ -49,3 +51,36 @@ Check-in: a `check-in deviceId=` line in the lab log, or a `fleet_store.py --db 
 ## If the emulator is down
 
 Restart it once with the user-space emulator binary, AVD `mdm36`, and `-no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -ports 5574,5575`. If that process exits, stop and keep the stderr. Do not install qemu and do not start a second emulator while one is already bound to those ports.
+
+## Same-database attestation (Phase 3)
+
+```bash
+scripts/emulator-same-db-attestation.sh
+```
+
+`OUT` defaults to `/tmp/mdm-phase3-attestation`. `ANDROID_HOME`, AVD `mdm36`, serial `emulator-5574`, and ports `5574,5575` match the device-owner script. This tree has no `gradlew`. Set `GRADLE_BIN` to a Gradle 8.9 binary, or the script uses `gradle` on `PATH`.
+
+The script removes `fleet.sqlite` in `OUT` before it listens, so the run has a new database. A device-owner package rejects `pm clear`. `assembleDebug` is not test-only unless Gradle is given `-Pandroid.injected.testOnly=true`, and `dpm remove-active-admin` rejects a non-test owner. The test-only bit is stored when the admin is first set, so installing a test-only APK over the #38 owner does not flip it. The script builds with that property and installs with `-t`. If removal still reports a non-test admin, it stops the Android framework, deletes `/data/system/device_owner_2.xml` and `/data/system/device_policies.xml`, and starts the framework again. That is not a factory reset. It then runs `pm clear`, copies mTLS material, and calls `dpm set-device-owner`. The new owner is test-only, so a later run can use `remove-active-admin`. It exits if `shared_prefs/policy_compliance.xml` still contains `attestation_challenge_next` or `attestation_challenge_for_key`, or if keystore2 `keyentry.alias` still has `grapheneos_mdm_attest`. That query is `sqlite3 /data/misc/keystore/persistent.sqlite` after `adb root`. A leftover key is a setup failure.
+
+`LabServerConfigReceiver` saves the URL and runs `CheckInRunner` once per broadcast (`allowFollowUpCheckIn=false`). The second check-in is a second broadcast, not `checkin_now`. The script waits until the first `lab-checkin outcome=SUCCESS` is in logcat, then broadcasts again. `set-device-owner` also enqueues an `admin_enabled` check-in. The script `force-stop`s the package after owner is set and before the lab URL is saved, so that worker does not become a third POST. Desired state for the run is an empty package list, empty `policyFlags`, and a `noop` command.
+
+The second `check-in deviceId=` line is the record. The script exits non-zero when that line is missing, when the log has any other count than two (a later POST overwrites the sqlite row), or when `attestationStatus` is `challenge_mismatch`, `none`, `missing`, `parse_error`, or `unsupported`. It prints `attestationStatus` and `verifiedBootState`. The success line quotes that status. It says verified boot passed only when the status is `ok` and `verifiedBootState` is `Verified`.
+
+On this `userdebug` / `test-keys` image the chain check runs before the boot check. The honest status is often `chain_invalid`. `boot_unverified` is a record only when the chain passed and boot is not `Verified`. `verifiedBootState` can be null. `chain_invalid` is the server's judgment of a challenge this database issued. It is not attestation success. The image is not GrapheneOS.
+
+`server/same_db_attestation.py` is the check the script runs. `server/tests/test_same_db_attestation.py` drives `FleetStore.observe_attestation` on a temporary sqlite and exits non-zero for a forbidden second status, a single check-in line, and a third line. That test does not boot an emulator.
+
+### Bench result
+
+`scripts/emulator-same-db-attestation.sh` exited 0 on 2026-10-06. Image fingerprint `Android/sdk_slim_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys`, model `Android ATD built for x86_64`. The first lab line was `attestation=none`. The second line, which is the sqlite row, was:
+
+```
+deviceId a7fdb4548155d650
+clientCn lab-device-01
+osVersion 15
+attestationStatus chain_invalid
+verifiedBootState null
+lastCheckinAt 2026-10-06T17:40:49Z
+```
+
+`chain_invalid` means the keymint chain did not sign to `server/attestation-roots.pem`. The success line quoted that status. Verified boot was not passed. `verifiedBootState` is null. This is not a GrapheneOS result and not attestation success.

@@ -50,6 +50,7 @@ if str(_SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(_SERVER_DIR))
 
 from fleet_store import FleetStore  # noqa: E402
+from same_db_attestation import format_checkin_log  # noqa: E402
 
 
 SCHEMA_VERSION = 1
@@ -199,11 +200,13 @@ class CheckInHandler(BaseHTTPRequestHandler):
             desired = self.fleet.desired_for(device_id, self.desired)
             challenge = self.fleet.issue_challenge(device_id)
         self.log_message(
-            "check-in deviceId=%s packages=%s client=%s attestation=%s",
-            device_id,
-            len(inventory.get("installedPackages") or []),
-            subject,
-            attestation_status,
+            "%s",
+            format_checkin_log(
+                device_id,
+                len(inventory.get("installedPackages") or []),
+                subject,
+                attestation_status,
+            ),
         )
 
         response: dict[str, Any] = {
