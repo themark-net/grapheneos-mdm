@@ -15,6 +15,8 @@ The device-owner script is [scripts/emulator-device-owner.sh](../scripts/emulato
 
 The same-database attestation script is [scripts/emulator-same-db-attestation.sh](../scripts/emulator-same-db-attestation.sh). It is Phase 3. Details are in [Same-database attestation](#same-database-attestation-phase-3).
 
+The disallowAddUser script is [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). It is Phase 4 (issue #45). Details are in [Phase 4 — disallowAddUser on the operator page](#phase-4--disallowadduser-on-the-operator-page).
+
 ## SDK
 
 Use a user-space Android SDK. Do not install packages into `/usr` and do not commit SDK bits, system images, AVDs, APKs, or lab certs.
@@ -84,3 +86,78 @@ lastCheckinAt 2026-10-06T17:40:49Z
 ```
 
 `chain_invalid` means the keymint chain did not sign to `server/attestation-roots.pem`. The success line quoted that status. Verified boot was not passed. `verifiedBootState` is null. This is not a GrapheneOS result and not attestation success.
+
+## Phase 4 — disallowAddUser on the operator page
+
+Issue #45. The image is the same AOSP ATD emulator. This section does not assert attestation and does not call the image GrapheneOS.
+
+```bash
+scripts/emulator-policy-disallow-add-user.sh
+DISALLOW_ADD_USER=false scripts/emulator-policy-disallow-add-user.sh
+DISALLOW_ADD_USER=absent scripts/emulator-policy-disallow-add-user.sh
+```
+
+`OUT` defaults to `/tmp/mdm-phase4-policy`. `ANDROID_HOME`, AVD `mdm36`, serial `emulator-5574`, and `ANDROID_ADB_SERVER_PORT=5038` match the other bench scripts. This tree has no `gradlew`. Set `GRADLE_BIN` to a Gradle 8.9 binary, or the script uses `gradle` on `PATH`.
+
+`DISALLOW_ADD_USER` defaults to `true`. The script writes `desired.json` with `schemaVersion` 1, an empty `requiredPackages` list, a `noop` command id `emulator-phase4`, and:
+
+| `DISALLOW_ADD_USER` | `policyFlags` | Expected script result |
+| --- | --- | --- |
+| `true` (default) | `{"disallowAddUser": true}` | Exit 0. `no_add_user` is applied. The PASS line names that flag and the device id. |
+| `false` | `{"disallowAddUser": false}` | Exit non-zero. `FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=false)`. |
+| `absent` | `{}` | Exit non-zero. `FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=absent)`. |
+| any other value | (not written) | Exit non-zero before the emulator is used. |
+
+`false` and `absent` are expected to FAIL. That is the negative proof. The script stops at the restriction step and does not print PASS.
+
+The run removes a previous test-only device owner when one is set, `pm clear`s `net.themark.grapheneosmdm`, copies mTLS material, and calls `dpm set-device-owner`. It `adb reverse`s `tcp:8443` and broadcasts `LabServerConfigReceiver` once. It waits for one `lab-checkin outcome=SUCCESS`, one `check-in deviceId=` line, and the logcat line `Desired state policy flags applied` from tag `PolicyManager`. It saves `dumpsys device_policy` and `dumpsys user`, then runs `server/policy_restriction.py --restriction no_add_user`. On success it starts `ui_server.py` on 127.0.0.1:8787 against that sqlite, checks the listen address, and checks that `GET /api/devices` lists the check-in device id and that `GET /` is HTML with status 200.
+
+The log order is enroll, check-in, restriction, operator list. Guest temp files are named `mdm-phase4-*`. Cleanup kills the lab server and `ui_server.py` and removes `adb reverse tcp:8443`. It does not stop the emulator. There is no wipe command and no `-wipe-data`.
+
+If the restriction is missing, the script exits non-zero and names that step. Read `PolicyManager` logcat for the policyFlags parse. If port 8787 is busy, or the UI is bound to `0.0.0.0`, `*`, or `::`, the script exits and does not bind off 127.0.0.1. If the emulator or KVM is unavailable, that is a host blocker. Do not fake a PASS.
+
+`server/tests/test_policy_restriction.py` checks the dumpsys parser. It does not boot an emulator.
+
+### Bench log 2026-10-09
+
+Run on nimo, 2026-10-09 ~00:55 PT, AVD `mdm36`, serial `emulator-5574`, fingerprint `Android/sdk_slim_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys`. AOSP ATD emulator, not GrapheneOS. `GRADLE_BIN` was a user-space Gradle 8.9. Same script, three modes, run in this order:
+
+```text
+# DISALLOW_ADD_USER=absent  -> exit 1
+  "policyFlags": {},
+check-in deviceId=a7fdb4548155d650 packages=73 client=lab-device-01 attestation=none
+I PolicyManager: Desired state policy flags applied
+== restriction ==
+restriction no_add_user is not applied
+FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=absent)
+
+# DISALLOW_ADD_USER=false   -> exit 1
+  "policyFlags": {"disallowAddUser": false},
+check-in deviceId=a7fdb4548155d650 packages=73 client=lab-device-01 attestation=none
+I PolicyManager: Desired state policy flags applied
+== restriction ==
+restriction no_add_user is not applied
+FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=false)
+
+# DISALLOW_ADD_USER=true (default) -> exit 0
+  "policyFlags": {"disallowAddUser": true},
+Success: Device owner set to package net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver
+check-in deviceId=a7fdb4548155d650 packages=73 client=lab-device-01 attestation=none
+I PolicyManager: Desired state policy flags applied
+== restriction ==
+      no_add_user                                         (dumpsys user, Effective restrictions:)
+    no_add_user                                           (dumpsys user, Device policy global restrictions:)
+    UserRestrictionPolicyKey userRestriction_no_add_user  (dumpsys device_policy, Global Policies)
+        BooleanPolicyValue { mValue= true }               (Resolved Policy (MostRestrictive))
+== operator list ==
+fleet UI http://127.0.0.1:8787/  db=/tmp/mdm-phase4-policy/fleet.sqlite
+-- ss listeners on 8787 --
+127.0.0.1:8787
+a7fdb4548155d650
+operator page HTTP 200
+PASS: no_add_user applied via policyFlags.disallowAddUser=true; operator list on 127.0.0.1:8787 shows deviceId=a7fdb4548155d650. AOSP ATD emulator, not GrapheneOS; attestation not asserted.
+```
+
+`GET /api/devices` on 127.0.0.1:8787 returned one row: `deviceId a7fdb4548155d650`, `clientCn lab-device-01`, `osVersion 15`, `securityPatch 2024-09-05`, `attestationStatus none`, `verifiedBootState null`, `simulated false`. `attestationStatus none` is expected on a single check-in against a new sqlite (no nonce issued yet). Attestation was not passed and is not part of this phase. After each run nothing listened on 8443 or 8787. The emulator was left running.
+
+Two fixes came out of the bench. `adb logcat -s` keeps only the last level given per tag, so `PolicyManager:I ... PolicyManager:E` hid the Info line; the script now passes one level per tag. Android 15 prints the policy key as `UserRestrictionPolicyKey userRestriction_no_add_user`, which the first parser draft missed; `server/policy_restriction.py` now accepts that prefix and reads only the `Resolved Policy` section when one is present. Both cases are in `server/tests/test_policy_restriction.py` with text captured from this run.
