@@ -222,4 +222,18 @@ The emulator-runner step is attempted once. The wrapper touches `/tmp/mdm-ci/scr
 
 `CERTS_DIR` on the runner is `/tmp/mdm-certs/<leg>`. That directory is not the upload path. The upload also drops `!/tmp/mdm-ci/**/certs/**` and certificate/key suffixes. The wrapper fails the job if a `*.pem`, `*.p12`, `*.key`, `*.crt`, or `certs/` directory is under `/tmp/mdm-ci`. The nimo default is still `$OUT/certs`.
 
-Triggers: `pull_request` and `push` to `main`, filtered to the operate script, the CI wrapper, `server/**`, `app/**`, `protocol/**`, the Gradle files and the workflow file, plus `workflow_dispatch`. There is no cron. Concurrency cancels an older run on the same PR or ref. The job timeout is 45 minutes.
+Triggers: `pull_request` and `push` to `main`, filtered to the operate script, the CI wrapper, `server/**`, `app/**`, `protocol/**`, the Gradle files and the workflow file, plus `workflow_dispatch`. There is no cron. Concurrency cancels an older run on the same PR or ref. The job timeout is 45 minutes. `docs/**` is not in the filter, so a docs-only commit does not re-trigger this job.
+
+### CI result
+
+`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last code SHA. Green run on that SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590, job `AOSP ATD emulator policy (disallowAddUser)`. The boot retry step was skipped. The image is an AOSP ATD emulator, not GrapheneOS. Attestation was not asserted. This docs-only commit records that URL and does not re-trigger the path-filtered emulator job.
+
+```
+ASSERT OK: leg absent DISALLOW_ADD_USER=absent exit=1 expected=1
+ASSERT OK: leg false DISALLOW_ADD_USER=false exit=1 expected=1
+ASSERT OK: leg true-then-false DISALLOW_ADD_USER=true-then-false exit=0 expected=0
+ASSERT OK: leg true DISALLOW_ADD_USER=true exit=0 expected=0
+ASSERT OK: post-run device owner is net.themark.grapheneosmdm
+ASSERT OK: post-run no_add_user is applied
+ASSERT OK: no cert or key file under /tmp/mdm-ci
+```

@@ -55,6 +55,8 @@ Bench result (2026-10-09, nimo): `false` and `absent` FAIL at the restriction st
 
 [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml) boots the AOSP ATD Android 15 emulator (`api-level 35`, `aosp_atd`, `x86_64`) on a free `ubuntu-latest` runner with KVM enabled by a udev rule. No self-hosted runner. [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh) runs [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh) as `absent` and `false` (exit 1 asserted), `true-then-false` (true applies `no_add_user`, a second check-in with `false` and no owner reset clears it; exit 0) and `true` (exit 0), then asserts the post-run state: device owner and `no_add_user` applied. Logs upload as the `emulator-policy-logs` artifact. Triggers are path-filtered `pull_request` / `push` to `main`, plus `workflow_dispatch`. The image is not GrapheneOS. Attestation is not asserted. Procedure: [docs/EMULATOR.md](EMULATOR.md#phase-5--github-hosted-kvm-runner).
 
+`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last code SHA. The green emulator run on that SHA is https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590 (job `AOSP ATD emulator policy (disallowAddUser)`). This docs-only commit records that URL. It does not re-trigger the path-filtered emulator job.
+
 ## Next slice
 
 Not chosen yet. Candidates that stay org-can-do: gate one more `policyFlags` restriction in the same CI job, or put the Phase 3 same-database script on the same runner (it records `chain_invalid`; that is a record, not attestation success). Pick one with the founder before starting.

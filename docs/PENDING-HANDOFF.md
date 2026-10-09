@@ -87,6 +87,8 @@ Issue #47. Branch `build/p5-gha-kvm`, based on `main` at `51c6c3b` (PR #46 merge
 
 [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml) runs on `ubuntu-latest` (no self-hosted runner). It enables `/dev/kvm` with a udev rule, installs JDK 17, Gradle 8.9 and Python 3.12 with setup actions, and boots `system-images;android-35;aosp_atd;x86_64` with `reactivecircus/android-emulator-runner` v2.38.0 (pinned by SHA). [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh) runs the operate script four times and asserts each exit code: `absent` 1, `false` 1, `true-then-false` 0, `true` 0. It then asserts the post-run state: this app is device owner and `no_add_user` is applied. Triggers are `pull_request` and `push` to `main` filtered to the script, `server/**`, `app/**`, `protocol/**`, Gradle files and the workflow, plus `workflow_dispatch`. No cron. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
 
+`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last code SHA. Green emulator run on that SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590. This docs-only commit records that URL and does not re-trigger the path-filtered emulator job.
+
 ### Earlier squash merges
 
 One line each. Longer notes for these are in the commit subjects and the docs linked in section 5.
