@@ -139,6 +139,8 @@ The nimo defaults are unchanged. CI overrides them through [scripts/ci-emulator-
 | `UI_PORT` | `8787` | `8787` |
 | `PORT` | `8443` | `8443` |
 | `OUT` | `/tmp/mdm-phase4-policy` | `/tmp/mdm-ci/<leg>` |
+| `CERTS_DIR` | `$OUT/certs` | `/tmp/mdm-certs/<leg>` (not under the uploaded log dir) |
+| AVD name | `mdm36` | `avd-name: mdm36` on the emulator runner |
 
 `server/tests/test_policy_restriction.py` checks the dumpsys parser. It does not boot an emulator.
 
@@ -193,10 +195,11 @@ Issue #47. The image is the same AOSP ATD Android 15 emulator (`system-images;an
 [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml), job `AOSP ATD emulator policy (disallowAddUser)`, runs on `ubuntu-latest`. There is no self-hosted runner. Steps:
 
 1. Enable KVM with the udev rule `KERNEL=="kvm", GROUP="kvm", MODE="0666"` on the hosted runner.
-2. `actions/setup-java` (Temurin 17), `gradle/actions/setup-gradle` (Gradle 8.9), `actions/setup-python` (3.12).
+2. `actions/setup-java` (Temurin 17), `gradle/actions/setup-gradle` (Gradle 8.9), and `actions/setup-python` (3.12), each pinned by commit SHA, as are `actions/checkout` and `actions/upload-artifact`.
 3. Build the test-only debug APK before the emulator boots.
-4. `reactivecircus/android-emulator-runner` v2.38.0 (pinned by SHA) with `api-level: 35`, `target: aosp_atd`, `arch: x86_64` boots the emulator on `emulator-5554` and runs `scripts/ci-emulator-policy.sh`.
-5. `actions/upload-artifact` uploads `/tmp/mdm-ci` as `emulator-policy-logs`, `if: always()`. Lab certificates under `*/certs/` are excluded.
+4. `reactivecircus/android-emulator-runner` v2.38.0 (pinned by SHA) with `api-level: 35`, `target: aosp_atd`, `arch: x86_64`, `avd-name: mdm36` boots the emulator on `emulator-5554` and runs `scripts/ci-emulator-policy.sh`.
+5. If that step fails before the wrapper creates `/tmp/mdm-ci/script-started`, the same emulator step runs once more. See [Boot retry](#boot-retry).
+6. `actions/upload-artifact` uploads `/tmp/mdm-ci` as `emulator-policy-logs`, `if: always()`. The path excludes `!/tmp/mdm-ci/**/certs/**` and `*.pem` / `*.p12` / `*.key` / `*.crt`. Lab certs are not written under `/tmp/mdm-ci` at all.
 
 `scripts/ci-emulator-policy.sh` runs four legs, each with its own `OUT`, and asserts every exit code:
 
@@ -208,5 +211,15 @@ Issue #47. The image is the same AOSP ATD Android 15 emulator (`system-images;an
 | true | `true` | 0 | `PASS: no_add_user applied via policyFlags.disallowAddUser=true` |
 
 A negative leg that prints `PASS:` also fails the job. After the legs it saves `logcat`, `dumpsys device_policy`, `dumpsys user` and `dpm list-owners`, and asserts the post-run state: this app is device owner and `no_add_user` is applied. The summary lines start with `ASSERT OK:` or `ASSERT FAIL:` and are in `summary.txt` in the artifact.
+
+Each leg also appends to the job summary (`$GITHUB_STEP_SUMMARY`, copied in `job-summary.md`): every `policy_restriction.py` output line, the `GET /api/devices` row (or `not reached` when the negative leg stops before the operator list), and the `PASS:` or `FAIL:` line. `true-then-false` adds the after-false `policy_restriction.py` lines as well.
+
+### Boot retry
+
+The emulator-runner step is attempted once. The wrapper touches `/tmp/mdm-ci/script-started` as soon as it starts, which is after the action has booted the emulator. If the step's outcome is failure and that file is missing, the job runs the same step one more time (`avd-name: mdm36`, same image, same script) and then stops. A second failure fails the job. If the script has started, a failed leg is the result: it is not retried.
+
+### Certs stay out of the artifact
+
+`CERTS_DIR` on the runner is `/tmp/mdm-certs/<leg>`. That directory is not the upload path. The upload also drops `!/tmp/mdm-ci/**/certs/**` and certificate/key suffixes. The wrapper fails the job if a `*.pem`, `*.p12`, `*.key`, `*.crt`, or `certs/` directory is under `/tmp/mdm-ci`. The nimo default is still `$OUT/certs`.
 
 Triggers: `pull_request` and `push` to `main`, filtered to the operate script, the CI wrapper, `server/**`, `app/**`, `protocol/**`, the Gradle files and the workflow file, plus `workflow_dispatch`. There is no cron. Concurrency cancels an older run on the same PR or ref. The job timeout is 45 minutes.

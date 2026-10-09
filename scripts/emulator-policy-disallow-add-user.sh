@@ -18,8 +18,10 @@
 # Environment overrides (nimo defaults in brackets): SERIAL [emulator-5574],
 # ANDROID_ADB_SERVER_PORT [5038], AVD [mdm36], CONSOLE_PORT/ADB_PORT
 # [5574/5575], GRADLE_BIN [unset], OUT [/tmp/mdm-phase4-policy],
-# PORT [8443], UI_PORT [8787]. GitHub Actions sets SERIAL=emulator-5554 and
-# ANDROID_ADB_SERVER_PORT=5037 through scripts/ci-emulator-policy.sh.
+# PORT [8443], UI_PORT [8787], CERTS_DIR [$OUT/certs]. GitHub Actions sets
+# SERIAL=emulator-5554, ANDROID_ADB_SERVER_PORT=5037, and
+# CERTS_DIR=/tmp/mdm-certs/<leg> (outside the uploaded log dir) through
+# scripts/ci-emulator-policy.sh.
 #
 # The log record order is enroll (set-device-owner), check-in, restriction,
 # operator list. One lab broadcast (two in true-then-false). No wipe, no -wipe-data, no factory reset.
@@ -93,6 +95,7 @@ OUT="${OUT:-/tmp/mdm-phase4-policy}"
 PORT="${PORT:-8443}"
 LAB_URL="https://127.0.0.1:${PORT}"
 UI_PORT="${UI_PORT:-8787}"
+CERTS_DIR="${CERTS_DIR:-$OUT/certs}"
 MODE="${DISALLOW_ADD_USER:-true}"
 LAB_PID=""
 UI_PID=""
@@ -136,6 +139,7 @@ echo "ANDROID_ADB_SERVER_PORT=$ANDROID_ADB_SERVER_PORT"
 echo "SERIAL=$SERIAL"
 echo "DISALLOW_ADD_USER=$MODE"
 echo "UI_PORT=$UI_PORT"
+echo "CERTS_DIR=$CERTS_DIR"
 echo "OUT=$OUT"
 
 ensure_emulator() {
@@ -418,13 +422,13 @@ echo "pm clear exit=$CLEAR_RC"
 printf '%s\n' "$CLEAR_OUT" | tr -d '\r' | grep -q "Success" || fail "pm clear did not report Success: $CLEAR_OUT"
 
 echo "== mTLS material into app_mtls =="
-rm -rf "$OUT/certs"
-bash "$ROOT/server/gen-lab-certs.sh" "$OUT/certs"
+rm -rf "$CERTS_DIR"
+bash "$ROOT/server/gen-lab-certs.sh" "$CERTS_DIR"
 openssl pkcs12 -export -legacy -name lab-device-01 \
-  -out "$OUT/certs/client.p12" \
-  -inkey "$OUT/certs/client-key.pem" \
-  -in "$OUT/certs/client.pem" \
-  -certfile "$OUT/certs/ca.pem" \
+  -out "$CERTS_DIR/client.p12" \
+  -inkey "$CERTS_DIR/client-key.pem" \
+  -in "$CERTS_DIR/client.pem" \
+  -certfile "$CERTS_DIR/ca.pem" \
   -passout pass:
 case "$MODE" in
   true|true-then-false) FLAGS='{"disallowAddUser": true}' ;;
@@ -441,8 +445,8 @@ cat >"$OUT/desired.json" <<JSON
 JSON
 echo "== desired.json =="
 cat "$OUT/desired.json"
-adb -s "$SERIAL" push "$OUT/certs/client.p12" /data/local/tmp/mdm-phase4-client.p12
-adb -s "$SERIAL" push "$OUT/certs/ca.pem" /data/local/tmp/mdm-phase4-ca.pem
+adb -s "$SERIAL" push "$CERTS_DIR/client.p12" /data/local/tmp/mdm-phase4-client.p12
+adb -s "$SERIAL" push "$CERTS_DIR/ca.pem" /data/local/tmp/mdm-phase4-ca.pem
 adb -s "$SERIAL" shell chmod 644 /data/local/tmp/mdm-phase4-client.p12 /data/local/tmp/mdm-phase4-ca.pem
 adb -s "$SERIAL" shell run-as "$PKG" mkdir -p app_mtls
 adb -s "$SERIAL" shell run-as "$PKG" cp /data/local/tmp/mdm-phase4-client.p12 app_mtls/client.p12
@@ -484,7 +488,7 @@ trap cleanup EXIT
 echo "== lab server (new sqlite) =="
 rm -f "$OUT/fleet.sqlite" "$OUT/fleet.sqlite-wal" "$OUT/fleet.sqlite-shm" "$OUT/lab.log"
 python3 "$ROOT/server/lab_checkin.py" \
-  --certs "$OUT/certs" \
+  --certs "$CERTS_DIR" \
   --host 127.0.0.1 \
   --port "$PORT" \
   --desired "$OUT/desired.json" \
@@ -541,9 +545,11 @@ set +e
 python3 "$ROOT/server/policy_restriction.py" \
   --restriction no_add_user \
   --device-policy "$OUT/device_policy.txt" \
-  --user "$OUT/dumpsys_user.txt" | tee "$OUT/restriction-match.txt"
-RESTRICT_RC=${PIPESTATUS[0]}
+  --user "$OUT/dumpsys_user.txt" \
+  >"$OUT/restriction-match.txt" 2>&1
+RESTRICT_RC=$?
 set -e
+cat "$OUT/restriction-match.txt"
 if [ "$RESTRICT_RC" -ne 0 ]; then
   fail "restriction no_add_user not applied (DISALLOW_ADD_USER=${MODE})"
 fi
@@ -644,9 +650,11 @@ JSON
   python3 "$ROOT/server/policy_restriction.py" \
     --restriction no_add_user \
     --device-policy "$OUT/device_policy-after-false.txt" \
-    --user "$OUT/dumpsys_user-after-false.txt" | tee "$OUT/restriction-after-false.txt"
-  CLEAR_RC=${PIPESTATUS[0]}
+    --user "$OUT/dumpsys_user-after-false.txt" \
+    >"$OUT/restriction-after-false.txt" 2>&1
+  CLEAR_RC=$?
   set -e
+  cat "$OUT/restriction-after-false.txt"
   if [ "$CLEAR_RC" -eq 0 ]; then
     fail "step clear: no_add_user still applied after disallowAddUser=false"
   fi
