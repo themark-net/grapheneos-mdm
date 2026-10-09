@@ -222,11 +222,11 @@ The emulator-runner step is attempted once. The wrapper touches `/tmp/mdm-ci/scr
 
 `CERTS_DIR` on the runner is `/tmp/mdm-certs/<leg>`. That directory is not the upload path. The upload also drops `!/tmp/mdm-ci/**/certs/**` and certificate/key suffixes. The wrapper fails the job if a `*.pem`, `*.p12`, `*.key`, `*.crt`, or `certs/` directory is under `/tmp/mdm-ci`. The nimo default is still `$OUT/certs`.
 
-Triggers: `pull_request` and `push` to `main`, filtered to the operate script, the CI wrapper, `server/**`, `app/**`, `protocol/**`, the Gradle files and the workflow file, plus `workflow_dispatch`. There is no cron. Concurrency cancels an older run on the same PR or ref. The job timeout is 45 minutes. `docs/**` is not in the filter, so a docs-only commit does not re-trigger this job.
+Triggers: `pull_request` and `push` to `main`, filtered to the operate script, the CI wrapper, `server/**`, `app/**`, `protocol/**`, the Gradle files and the workflow file, plus `workflow_dispatch`. There is no cron. Concurrency cancels an older run on the same PR or ref. The job timeout is 45 minutes. `docs/**` is not in the filter, so a docs-only `push` to `main` does not run this job. On `pull_request` the filter matches the whole PR diff, so a docs-only head still re-runs the job while the PR also changes a listed path.
 
 ### CI result
 
-`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last code SHA. Green run on that SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590, job `AOSP ATD emulator policy (disallowAddUser)`. The boot retry step was skipped. The image is an AOSP ATD emulator, not GrapheneOS. Attestation was not asserted. This docs-only commit records that URL and does not re-trigger the path-filtered emulator job.
+`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last code SHA. Green run on that SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590, job `AOSP ATD emulator policy (disallowAddUser)`. The boot retry step was skipped. The image is an AOSP ATD emulator, not GrapheneOS. Attestation was not asserted. Docs head `5a4e8f1` (`5a4e8f1a9f7417e208e579a079af4c893fa7ba59`) ran the same job at https://github.com/themark-net/grapheneos-mdm/actions/runs/37977122809, because `pull_request` path filters match the whole PR diff.
 
 ```
 ASSERT OK: leg absent DISALLOW_ADD_USER=absent exit=1 expected=1

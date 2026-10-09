@@ -42,4 +42,4 @@ Phase 5, issue #47. One line each: choice | alternatives | why
 - Lab certs in `/tmp/mdm-certs/<leg>`, outside the uploaded log dir, and the upload also excludes `!/tmp/mdm-ci/**/certs/**` plus pem/p12/key/crt | exclusion glob only | the repo is public; a glob miss must not publish the CA key, `client-key.pem`, or `client.p12`
 - SHA-pin checkout, setup-java, setup-python, setup-gradle, and upload-artifact | leave the floating major tags | same supply-chain pin as the emulator action; the SHAs are the current tips of those major tags
 - Per-leg lines in `$GITHUB_STEP_SUMMARY` from the wrapper | a later step that parses the logs | the wrapper already has each leg's restriction file, devices JSON, and PASS/FAIL line
-- Run URL in a final docs-only commit citing the code SHA | include in same commit; leave out | avoids the chicken-and-egg; path filter skips the emulator job for docs-only
+- Run URL in a final docs-only commit citing code SHA | same commit; omit | avoids the chicken-and-egg; note pull_request path filters match the whole PR diff, so docs-only heads still re-run the emulator job

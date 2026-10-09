@@ -46,9 +46,9 @@ actionlint .github/workflows/*.yml
 
 ## CI result
 
-`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last code SHA. This docs-only commit records the run and does not re-trigger the path-filtered emulator job.
+`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last code SHA. `pull_request` path filters match the whole PR diff, so docs head `5a4e8f1` (`5a4e8f1a9f7417e208e579a079af4c893fa7ba59`) ran the emulator job again: https://github.com/themark-net/grapheneos-mdm/actions/runs/37977122809.
 
-Run: https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590
+Code-SHA run: https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590
 
 Job: `AOSP ATD emulator policy (disallowAddUser)`, conclusion success, on code SHA `ef320ae`. The boot-retry step was skipped. `/dev/kvm` was mode `0666`. The fingerprint was `Android/sdk_slim_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys`, which matches the nimo guard. The image is an AOSP ATD emulator, not GrapheneOS. Attestation was not asserted. The artifact has no cert or key file.
 
