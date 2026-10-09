@@ -28,7 +28,7 @@ DISALLOW_ADD_USER=false GRADLE_BIN=/path/to/gradle-8.9/bin/gradle scripts/emulat
 DISALLOW_ADD_USER=absent GRADLE_BIN=/path/to/gradle-8.9/bin/gradle scripts/emulator-policy-disallow-add-user.sh
 ```
 
-`OUT` defaults to `/tmp/mdm-phase4-policy`. The script writes a new `fleet.sqlite` there. Guest temp files are `mdm-phase4-*`. Procedure and the bench placeholder are in [docs/EMULATOR.md](../EMULATOR.md).
+`OUT` defaults to `/tmp/mdm-phase4-policy`. The script writes a new `fleet.sqlite` there. Guest temp files are `mdm-phase4-*`. Procedure and the bench log are in [docs/EMULATOR.md](../EMULATOR.md).
 
 Parser check, no device:
 
@@ -42,7 +42,7 @@ bash -n scripts/emulator-policy-disallow-add-user.sh
 - Restriction not applied: the script exits non-zero with `FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=<mode>)`. Read `PolicyManager` logcat for the policyFlags parse and for `Desired state policy flags applied`. Fix the flag or the device-owner state and run again. Do not claim the restriction applied.
 - `DISALLOW_ADD_USER=false` and `absent` are expected to fail at that step. That is the negative proof. The PASS line is only for `true`, and only after the operator list shows the device id.
 - If a negative mode still shows `no_add_user` applied, the script exits with `FAIL: restriction no_add_user applied during negative mode (DISALLOW_ADD_USER=<mode>)` and does not print PASS.
-- Port 8787 already bound, or the UI bound to `0.0.0.0`, `*`, or `::`: exit non-zero. `ui_server.py` is started with `--host 127.0.0.1 --port 8787` only. Free the port and run again.
+- Port `UI_PORT` (default 8787) already bound, or the UI bound to `0.0.0.0`, `*`, or `::`: exit non-zero. `ui_server.py` is started with `--host 127.0.0.1 --port "$UI_PORT"` only. Free the port and run again.
 - Emulator or KVM unavailable: host blocker. The script prints the emulator log and exits. Do not install qemu, do not start a second emulator on ports 5574,5575, and do not fake a PASS.
 - `dpm set-device-owner` rejected: the command output is in the log. No factory reset and no wipe.
 - A non-test device owner blocks `pm clear`. The script builds with `-Pandroid.injected.testOnly=true`. If remove still reports a non-test admin, it stops the framework and deletes `device_owner_2.xml` and `device_policies.xml`. That is not a factory reset.
@@ -60,7 +60,7 @@ bash -n scripts/emulator-policy-disallow-add-user.sh
 
 ## Next
 
-Phase 5 in [docs/ROADMAP.md](../ROADMAP.md): run the operate script on a KVM runner. Open questions for Phase 5: the bench needs a user-space Gradle 8.9 (`GRADLE_BIN`) because the tree has no `gradlew`; a KVM runner has to supply that too.
+Phase 5 (issue #47) runs this script on a GitHub-hosted KVM runner. See [HANDOFF-p5-gha-kvm-2026-10-09.md](HANDOFF-p5-gha-kvm-2026-10-09.md). The runner supplies Gradle 8.9 through `gradle/actions/setup-gradle`.
 
 ## Bench result 2026-10-09 (nimo)
 

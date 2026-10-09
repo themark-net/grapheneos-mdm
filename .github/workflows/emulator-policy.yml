@@ -1,0 +1,98 @@
+name: Emulator policy (AOSP ATD)
+
+# Phase 5 (issue #47). Runs scripts/emulator-policy-disallow-add-user.sh on a
+# GitHub-hosted ubuntu-latest runner with KVM. The image is the AOSP ATD
+# Android 15 emulator (system-images;android-35;aosp_atd;x86_64). It is not
+# GrapheneOS, and attestation is not asserted.
+
+on:
+  pull_request:
+    paths:
+      - scripts/emulator-policy-disallow-add-user.sh
+      - scripts/ci-emulator-policy.sh
+      - server/**
+      - app/**
+      - protocol/**
+      - build.gradle.kts
+      - settings.gradle.kts
+      - gradle.properties
+      - gradle/**
+      - .github/workflows/emulator-policy.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/emulator-policy-disallow-add-user.sh
+      - scripts/ci-emulator-policy.sh
+      - server/**
+      - app/**
+      - protocol/**
+      - build.gradle.kts
+      - settings.gradle.kts
+      - gradle.properties
+      - gradle/**
+      - .github/workflows/emulator-policy.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: emulator-policy-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulator-policy:
+    name: AOSP ATD emulator policy (disallowAddUser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      LOGDIR: /tmp/mdm-ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build testOnly debug APK (before the emulator boots)
+        run: gradle --no-daemon --console=plain :app:assembleDebug -Pandroid.injected.testOnly=true
+
+      - name: Run operate script legs on the emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: aosp_atd
+          arch: x86_64
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          emulator-boot-timeout: 900
+          script: bash scripts/ci-emulator-policy.sh
+
+      - name: Upload run logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-policy-logs
+          path: |
+            /tmp/mdm-ci/
+            !/tmp/mdm-ci/**/certs/
+          if-no-files-found: warn
+          retention-days: 14

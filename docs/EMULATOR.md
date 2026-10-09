@@ -17,6 +17,8 @@ The same-database attestation script is [scripts/emulator-same-db-attestation.sh
 
 The disallowAddUser script is [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). It is Phase 4 (issue #45). Details are in [Phase 4 — disallowAddUser on the operator page](#phase-4--disallowadduser-on-the-operator-page).
 
+Phase 5 (issue #47) runs that script on a GitHub-hosted KVM runner. Details are in [Phase 5 — GitHub-hosted KVM runner](#phase-5--github-hosted-kvm-runner).
+
 ## SDK
 
 Use a user-space Android SDK. Do not install packages into `/usr` and do not commit SDK bits, system images, AVDs, APKs, or lab certs.
@@ -106,15 +108,37 @@ DISALLOW_ADD_USER=absent scripts/emulator-policy-disallow-add-user.sh
 | `true` (default) | `{"disallowAddUser": true}` | Exit 0. `no_add_user` is applied. The PASS line names that flag and the device id. |
 | `false` | `{"disallowAddUser": false}` | Exit non-zero. `FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=false)`. |
 | `absent` | `{}` | Exit non-zero. `FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=absent)`. |
+| `true-then-false` (Phase 5) | `{"disallowAddUser": true}`, then a per-device override `{"disallowAddUser": false}` | Exit 0 only when `no_add_user` is applied after the first check-in and gone after the second, with no owner reset in between. |
 | any other value | (not written) | Exit non-zero before the emulator is used. |
 
 `false` and `absent` are expected to FAIL. That is the negative proof. The script stops at the restriction step and does not print PASS.
 
-The run removes a previous test-only device owner when one is set, `pm clear`s `net.themark.grapheneosmdm`, copies mTLS material, and calls `dpm set-device-owner`. It `adb reverse`s `tcp:8443` and broadcasts `LabServerConfigReceiver` once. It waits for one `lab-checkin outcome=SUCCESS`, one `check-in deviceId=` line, and the logcat line `Desired state policy flags applied` from tag `PolicyManager`. It saves `dumpsys device_policy` and `dumpsys user`, then runs `server/policy_restriction.py --restriction no_add_user`. On success it starts `ui_server.py` on 127.0.0.1:8787 against that sqlite, checks the listen address, and checks that `GET /api/devices` lists the check-in device id and that `GET /` is HTML with status 200.
+The run removes a previous test-only device owner when one is set, `pm clear`s `net.themark.grapheneosmdm`, copies mTLS material, and calls `dpm set-device-owner`. It `adb reverse`s `tcp:8443` and broadcasts `LabServerConfigReceiver` once. It waits for one `lab-checkin outcome=SUCCESS`, one `check-in deviceId=` line, and the logcat line `Desired state policy flags applied` from tag `PolicyManager`. It saves `dumpsys device_policy` and `dumpsys user`, then runs `server/policy_restriction.py --restriction no_add_user`. On success it starts `ui_server.py` on 127.0.0.1:`UI_PORT` (default 8787) against that sqlite, checks the listen address, and checks that `GET /api/devices` lists the check-in device id and that `GET /` is HTML with status 200.
 
-The log order is enroll, check-in, restriction, operator list. Guest temp files are named `mdm-phase4-*`. Cleanup kills the lab server and `ui_server.py` and removes `adb reverse tcp:8443`. It does not stop the emulator. There is no wipe command and no `-wipe-data`.
+The log order is enroll, check-in, restriction, operator list. Guest temp files are named `mdm-phase4-*`. Cleanup kills the lab server and `ui_server.py` and removes `adb reverse tcp:$PORT` (default 8443). It does not stop the emulator. There is no wipe command and no `-wipe-data`.
 
-If the restriction is missing, the script exits non-zero and names that step. Read `PolicyManager` logcat for the policyFlags parse. If port 8787 is busy, or the UI is bound to `0.0.0.0`, `*`, or `::`, the script exits and does not bind off 127.0.0.1. If the emulator or KVM is unavailable, that is a host blocker. Do not fake a PASS.
+If the restriction is missing, the script exits non-zero and names that step. Read `PolicyManager` logcat for the policyFlags parse. If `UI_PORT` (default 8787) is busy, or the UI is bound to `0.0.0.0`, `*`, or `::`, the script exits and does not bind off 127.0.0.1. If the emulator or KVM is unavailable, that is a host blocker. Do not fake a PASS.
+
+`true-then-false` runs the `true` steps through the operator list, then writes `desired-false.json` (`{"disallowAddUser": false}`, noop id `emulator-phase5-clear`), stores it as a per-device override with `server/fleet_store.py --db … set-desired <deviceId>`, and broadcasts a second check-in. It does not remove the owner and does not `pm clear` in between. It waits for two `lab-checkin outcome=SUCCESS` lines, two `check-in deviceId=` lines and two `Desired state policy flags applied` lines, saves `device_policy-after-false.txt` and `dumpsys_user-after-false.txt`, and requires `policy_restriction.py` to exit 1 (not applied). Otherwise it exits with `FAIL: step clear: no_add_user still applied after disallowAddUser=false`. The agent maps `false` to `DevicePolicyManager.clearUserRestriction` (`PolicyManager.applyDesiredState`, covered by `PolicyRestrictionTest.falseFlagsClearRestrictions`).
+
+### Post-run emulator state
+
+The script does not stop the emulator and does not undo its policy. After a `true` run, `net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver` is device owner (test-only) and `no_add_user` is set. After `true-then-false`, the app is still device owner and `no_add_user` is cleared. After `false` or `absent`, the app is device owner and `no_add_user` is not set. The next run of any emulator script removes the test-only owner first, which also drops the restrictions that owner set.
+
+### Environment overrides
+
+The nimo defaults are unchanged. CI overrides them through [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh).
+
+| Variable | nimo default | GitHub Actions |
+| --- | --- | --- |
+| `SERIAL` | `emulator-5574` | `emulator-5554` |
+| `ANDROID_ADB_SERVER_PORT` | `5038` | `5037` |
+| `ANDROID_HOME` | `../android-sdk` | runner SDK |
+| `ANDROID_USER_HOME` | `$ANDROID_HOME/user-home` | `$HOME/.android` |
+| `GRADLE_BIN` | unset (bench uses a user-space Gradle 8.9) | `gradle` from `gradle/actions/setup-gradle` (8.9) |
+| `UI_PORT` | `8787` | `8787` |
+| `PORT` | `8443` | `8443` |
+| `OUT` | `/tmp/mdm-phase4-policy` | `/tmp/mdm-ci/<leg>` |
 
 `server/tests/test_policy_restriction.py` checks the dumpsys parser. It does not boot an emulator.
 
@@ -161,3 +185,28 @@ PASS: no_add_user applied via policyFlags.disallowAddUser=true; operator list on
 `GET /api/devices` on 127.0.0.1:8787 returned one row: `deviceId a7fdb4548155d650`, `clientCn lab-device-01`, `osVersion 15`, `securityPatch 2024-09-05`, `attestationStatus none`, `verifiedBootState null`, `simulated false`. `attestationStatus none` is expected on a single check-in against a new sqlite (no nonce issued yet). Attestation was not passed and is not part of this phase. After each run nothing listened on 8443 or 8787. The emulator was left running.
 
 Two fixes came out of the bench. `adb logcat -s` keeps only the last level given per tag, so `PolicyManager:I ... PolicyManager:E` hid the Info line; the script now passes one level per tag. Android 15 prints the policy key as `UserRestrictionPolicyKey userRestriction_no_add_user`, which the first parser draft missed; `server/policy_restriction.py` now accepts that prefix and reads only the `Resolved Policy` section when one is present. Both cases are in `server/tests/test_policy_restriction.py` with text captured from this run.
+
+## Phase 5 — GitHub-hosted KVM runner
+
+Issue #47. The image is the same AOSP ATD Android 15 emulator (`system-images;android-35;aosp_atd;x86_64`). It is not GrapheneOS. Attestation is not asserted.
+
+[.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml), job `AOSP ATD emulator policy (disallowAddUser)`, runs on `ubuntu-latest`. There is no self-hosted runner. Steps:
+
+1. Enable KVM with the udev rule `KERNEL=="kvm", GROUP="kvm", MODE="0666"` on the hosted runner.
+2. `actions/setup-java` (Temurin 17), `gradle/actions/setup-gradle` (Gradle 8.9), `actions/setup-python` (3.12).
+3. Build the test-only debug APK before the emulator boots.
+4. `reactivecircus/android-emulator-runner` v2.38.0 (pinned by SHA) with `api-level: 35`, `target: aosp_atd`, `arch: x86_64` boots the emulator on `emulator-5554` and runs `scripts/ci-emulator-policy.sh`.
+5. `actions/upload-artifact` uploads `/tmp/mdm-ci` as `emulator-policy-logs`, `if: always()`. Lab certificates under `*/certs/` are excluded.
+
+`scripts/ci-emulator-policy.sh` runs four legs, each with its own `OUT`, and asserts every exit code:
+
+| Leg | `DISALLOW_ADD_USER` | Required exit | Required line |
+| --- | --- | --- | --- |
+| absent | `absent` | 1 | `FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=absent)` |
+| false | `false` | 1 | `FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=false)` |
+| true-then-false | `true-then-false` | 0 | `PASS: no_add_user applied via disallowAddUser=true, then cleared by disallowAddUser=false with no owner reset` |
+| true | `true` | 0 | `PASS: no_add_user applied via policyFlags.disallowAddUser=true` |
+
+A negative leg that prints `PASS:` also fails the job. After the legs it saves `logcat`, `dumpsys device_policy`, `dumpsys user` and `dpm list-owners`, and asserts the post-run state: this app is device owner and `no_add_user` is applied. The summary lines start with `ASSERT OK:` or `ASSERT FAIL:` and are in `summary.txt` in the artifact.
+
+Triggers: `pull_request` and `push` to `main`, filtered to the operate script, the CI wrapper, `server/**`, `app/**`, `protocol/**`, the Gradle files and the workflow file, plus `workflow_dispatch`. There is no cron. Concurrency cancels an older run on the same PR or ref. The job timeout is 45 minutes.
