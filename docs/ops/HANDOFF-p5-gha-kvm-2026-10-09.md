@@ -46,4 +46,24 @@ actionlint .github/workflows/*.yml
 
 ## CI result
 
-See the PR for the run URL. Filled in below after the run.
+Green on `ddf5ff9` (`ddf5ff93d7a2c9d67bc879c7fab2d996a10cc233`), PR #48.
+
+Run: https://github.com/themark-net/grapheneos-mdm/actions/runs/37974703736
+
+Job: `AOSP ATD emulator policy (disallowAddUser)`, conclusion success. `/dev/kvm` was mode `0666`. The fingerprint was `Android/sdk_slim_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys`, which matches the nimo guard, so no override was added. The image is an AOSP ATD emulator, not GrapheneOS. Attestation was not asserted.
+
+```
+ASSERT OK: leg absent DISALLOW_ADD_USER=absent exit=1 expected=1
+  FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=absent)
+ASSERT OK: leg false DISALLOW_ADD_USER=false exit=1 expected=1
+  FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=false)
+ASSERT OK: leg true-then-false DISALLOW_ADD_USER=true-then-false exit=0 expected=0
+  PASS: no_add_user applied via disallowAddUser=true, then cleared by disallowAddUser=false with no owner reset; deviceId=39e2226490a7ea0a. AOSP ATD emulator, not GrapheneOS; attestation not asserted.
+ASSERT OK: leg true DISALLOW_ADD_USER=true exit=0 expected=0
+  PASS: no_add_user applied via policyFlags.disallowAddUser=true; operator list on 127.0.0.1:8787 shows deviceId=39e2226490a7ea0a. AOSP ATD emulator, not GrapheneOS; attestation not asserted.
+ASSERT OK: post-run device owner is net.themark.grapheneosmdm
+ASSERT OK: post-run no_add_user is applied
+RESULT: PASS (AOSP ATD emulator, not GrapheneOS; attestation not asserted)
+```
+
+Android unit tests on the same SHA also succeeded: https://github.com/themark-net/grapheneos-mdm/actions/runs/37974703559
