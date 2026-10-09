@@ -39,21 +39,21 @@ Script: [scripts/emulator-same-db-attestation.sh](../scripts/emulator-same-db-at
 
 `ok` still means the chain trusts `server/attestation-roots.pem` and `verifiedBootState` is `Verified`. The 2026-10-06 bench run on `userdebug` / `test-keys` printed second-check-in `attestationStatus chain_invalid` and `verifiedBootState` null. That is the server record. `boot_unverified` is a record only when that chain check passed and boot is not `Verified`. The success line quotes the status. It does not call verified boot passed unless the status is `ok`. The full row is in [docs/EMULATOR.md](EMULATOR.md) and [docs/PENDING-HANDOFF.md](PENDING-HANDOFF.md).
 
-Out of this phase, still: operator page, policy flags, CI, GrapheneOS, issue #8.
+Out of this phase, still: CI, GrapheneOS, issue #8. The operator page and `disallowAddUser` are Phase 4.
 
-## Next slice — Phase 4 — Emulator policy on the operator page
+### Phase 4 — Emulator policy on the operator page
 
-**org-can-do.** Assumes Phase 3 has landed, so a later log is not another `challenge_mismatch` row from a fresh sqlite.
+**org-can-do.** Implemented on `build/p4-disallow-add-user` (issue #45 PR), bench log in [docs/EMULATOR.md](EMULATOR.md). Still not Feature GO. Issue #45.
 
-`scripts/emulator-device-owner.sh` serves `policyFlags: {}` and a `noop` command, and it does not start `ui_server.py`. The Phase 3 script does the same. The agent already applies `policyFlags.disallowAddUser` through `UserManager.DISALLOW_ADD_USER`.
+Script: [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). One check-in on the AOSP ATD bench. `DISALLOW_ADD_USER` selects `policyFlags.disallowAddUser` (`true`, `false`, or absent). The desired state names no catalog APK. After check-in, [server/policy_restriction.py](../server/policy_restriction.py) reads `dumpsys device_policy` and `dumpsys user` for an applied `no_add_user`. `ui_server.py` on 127.0.0.1:8787 lists that device id. The script log order is enroll, check-in, restriction, operator list. `false` and `absent` are expected to fail at the restriction step. No wipe. The image is an AOSP ATD emulator. Attestation is not asserted.
 
-Definition of done: one script, same AOSP ATD bench, exits non-zero on a missing step. Desired state sets `disallowAddUser` true and does not name a catalog APK (the example APK is a placeholder and a hash mismatch looks like an install failure). After check-in, `dumpsys device_policy` shows that restriction. `ui_server.py` on 127.0.0.1:8787 against that sqlite lists the device id. The script log is the walkthrough record (enroll, check-in, operator list, restriction). No wipe command. No claim that the image is GrapheneOS.
+Bench result (2026-10-09, nimo): `false` and `absent` FAIL at the restriction step, `true` PASSes with `no_add_user` applied and the device id listed on 127.0.0.1:8787. Log: [docs/EMULATOR.md](EMULATOR.md#bench-log-2026-10-09).
 
-## Later
-
-### Phase 5 — Run the operate script on a KVM runner
+## Next slice — Phase 5 — Run the operate script on a KVM runner
 
 **org-can-do**, after Phase 4's script is the thing worth gating.
+
+Phase 4's script is [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). Its bench log is in [docs/EMULATOR.md](EMULATOR.md#bench-log-2026-10-09).
 
 `.github/workflows/ci.yml` installs platform 35 and build-tools. It does not install `emulator` or `system-images;android-35;aosp_atd;x86_64`. The bench script expects a local SDK (`ANDROID_HOME`), AVD `mdm36`, and `adb` ports 5574/5575. A CI job has to provide that image and KVM. Until a runner has both, the gate stays a documented script that fails locally, which Phase 2 already has for device-owner plus a single check-in.
 
