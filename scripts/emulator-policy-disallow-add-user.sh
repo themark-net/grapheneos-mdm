@@ -6,12 +6,25 @@
 # Not GrapheneOS. Issue #8 stays closed. Attestation is not asserted.
 # verified boot is not claimed. Draft PR #42 is not touched.
 #
-# DISALLOW_ADD_USER=true|false|absent (default true) chooses policyFlags.
-# true sets disallowAddUser true. false sets it false. absent sends {}.
-# Anything else exits before the emulator is touched.
+# DISALLOW_ADD_USER=true|false|absent|true-then-false (default true)
+# chooses policyFlags. true sets disallowAddUser true. false sets it false.
+# absent sends {}. true-then-false (Phase 5) applies true exactly like the
+# true mode, then, with no owner reset and no pm clear, sets a per-device
+# override {"disallowAddUser": false} in the same sqlite, broadcasts a
+# second check-in, and requires no_add_user to be gone
+# (clearUserRestriction). Anything else exits before the emulator is
+# touched.
+#
+# Environment overrides (nimo defaults in brackets): SERIAL [emulator-5574],
+# ANDROID_ADB_SERVER_PORT [5038], AVD [mdm36], CONSOLE_PORT/ADB_PORT
+# [5574/5575], GRADLE_BIN [unset], OUT [/tmp/mdm-phase4-policy],
+# PORT [8443], UI_PORT [8787], CERTS_DIR [$OUT/certs]. GitHub Actions sets
+# SERIAL=emulator-5554, ANDROID_ADB_SERVER_PORT=5037, and
+# CERTS_DIR=/tmp/mdm-certs/<leg> (outside the uploaded log dir) through
+# scripts/ci-emulator-policy.sh.
 #
 # The log record order is enroll (set-device-owner), check-in, restriction,
-# operator list. One lab broadcast. No wipe, no -wipe-data, no factory reset.
+# operator list. One lab broadcast (two in true-then-false). No wipe, no -wipe-data, no factory reset.
 # The script does not stop the emulator.
 #
 # How this can fail / recover:
@@ -20,15 +33,22 @@
 #   Read PolicyManager logcat for the policyFlags parse and the line
 #   "Desired state policy flags applied". Fix the desired.json flag or the
 #   device-owner state, then run again. Do not claim the restriction applied.
-# - Port 8787 busy, or the UI bound to 0.0.0.0, *, or ::: the script exits
-#   non-zero.
-#   Never bind ui_server.py off 127.0.0.1. Free 8787 and run again.
+# - Port UI_PORT (default 8787) busy, or the UI bound to 0.0.0.0, *, or ::
+#   : the script exits non-zero.
+#   Never bind ui_server.py off 127.0.0.1. Free UI_PORT and run again.
 # - Emulator or KVM unavailable: that is a host blocker. Exit and keep the
 #   emulator log. Do not install qemu. Do not boot a second emulator when
 #   one is already on ports 5574,5575. Do not fake a PASS.
 # - DISALLOW_ADD_USER=false or absent is expected to FAIL. That is the
 #   negative proof: the restriction is not applied, so the script stops at
 #   the restriction step and does not print PASS.
+# - true-then-false: if no_add_user is still applied after the false
+#   check-in, exit non-zero with
+#   FAIL: step clear: no_add_user still applied after disallowAddUser=false.
+# - Post-run state: after a true run the emulator is left with this app as
+#   device owner and no_add_user set. After true-then-false the app is still
+#   device owner and no_add_user is cleared. The next run removes the
+#   test-only owner, which drops its restrictions.
 # - A device-owner package rejects pm clear. assembleDebug is not testOnly
 #   unless -Pandroid.injected.testOnly=true, and dpm remove-active-admin
 #   rejects a non-test owner. The testOnly bit is stored when the admin is
@@ -71,10 +91,11 @@ CONSOLE_PORT="${CONSOLE_PORT:-5574}"
 ADB_PORT="${ADB_PORT:-5575}"
 COMPONENT="net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver"
 PKG="net.themark.grapheneosmdm"
-LAB_URL="https://127.0.0.1:8443"
 OUT="${OUT:-/tmp/mdm-phase4-policy}"
 PORT="${PORT:-8443}"
+LAB_URL="https://127.0.0.1:${PORT}"
 UI_PORT="${UI_PORT:-8787}"
+CERTS_DIR="${CERTS_DIR:-$OUT/certs}"
 MODE="${DISALLOW_ADD_USER:-true}"
 LAB_PID=""
 UI_PID=""
@@ -89,8 +110,8 @@ need() {
 }
 
 case "$MODE" in
-  true|false|absent) ;;
-  *) fail "DISALLOW_ADD_USER must be true, false, or absent (got: ${MODE})" ;;
+  true|false|absent|true-then-false) ;;
+  *) fail "DISALLOW_ADD_USER must be true, false, absent, or true-then-false (got: ${MODE})" ;;
 esac
 
 [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME" ] || fail "ANDROID_HOME is not a directory"
@@ -117,6 +138,8 @@ echo "JAVA_HOME=$JAVA_HOME"
 echo "ANDROID_ADB_SERVER_PORT=$ANDROID_ADB_SERVER_PORT"
 echo "SERIAL=$SERIAL"
 echo "DISALLOW_ADD_USER=$MODE"
+echo "UI_PORT=$UI_PORT"
+echo "CERTS_DIR=$CERTS_DIR"
 echo "OUT=$OUT"
 
 ensure_emulator() {
@@ -289,10 +312,12 @@ wait_for_n() {
 }
 
 wait_for_policy_applied() {
-  local i hit
+  local want="${1:-1}"
+  local i hit n
   for i in $(seq 1 60); do
     hit="$(adb -s "$SERIAL" logcat -d -s PolicyManager:D 2>/dev/null | tr -d '\r' | grep -F "Desired state policy flags applied" || true)"
-    if [ -n "$hit" ]; then
+    n="$(printf '%s\n' "$hit" | grep -c . || true)"
+    if [ "${n:-0}" -ge "$want" ]; then
       echo "$hit"
       return 0
     fi
@@ -300,7 +325,7 @@ wait_for_policy_applied() {
   done
   echo "---- logcat (PolicyManager / CheckInRunner / LabServerConfig) ----"
   adb -s "$SERIAL" logcat -d -s PolicyManager:D CheckInRunner:D LabServerConfig:I || true
-  fail "step policy-flags: PolicyManager logcat missing 'Desired state policy flags applied'"
+  fail "step policy-flags: PolicyManager logcat has fewer than ${want} 'Desired state policy flags applied'"
 }
 
 broadcast_lab() {
@@ -319,12 +344,12 @@ broadcast_lab() {
   [ "$bc_rc" -eq 0 ] || fail "lab broadcast failed ($label): $bc_out"
 }
 
-listeners_8787() {
-  ss -ltn 2>/dev/null | awk '$1 == "LISTEN" {
+listeners_ui_port() {
+  ss -ltn 2>/dev/null | awk -v want="$UI_PORT" '$1 == "LISTEN" {
     addr = $4
     port = addr
     sub(/^.*:/, "", port)
-    if (port == "8787") print addr
+    if (port == want) print addr
   }'
 }
 
@@ -337,11 +362,8 @@ cleanup() {
     kill "$UI_PID" 2>/dev/null || true
     wait "$UI_PID" 2>/dev/null || true
   fi
-  # Bench port is 8443. Do not stop the emulator.
-  timeout 15 adb -s "$SERIAL" reverse --remove tcp:8443 >/dev/null 2>&1 || true
-  if [ "${PORT:-8443}" != "8443" ]; then
-    timeout 15 adb -s "$SERIAL" reverse --remove "tcp:${PORT}" >/dev/null 2>&1 || true
-  fi
+  # Do not stop the emulator.
+  timeout 15 adb -s "$SERIAL" reverse --remove "tcp:${PORT}" >/dev/null 2>&1 || true
 }
 
 ensure_emulator
@@ -400,16 +422,16 @@ echo "pm clear exit=$CLEAR_RC"
 printf '%s\n' "$CLEAR_OUT" | tr -d '\r' | grep -q "Success" || fail "pm clear did not report Success: $CLEAR_OUT"
 
 echo "== mTLS material into app_mtls =="
-rm -rf "$OUT/certs"
-bash "$ROOT/server/gen-lab-certs.sh" "$OUT/certs"
+rm -rf "$CERTS_DIR"
+bash "$ROOT/server/gen-lab-certs.sh" "$CERTS_DIR"
 openssl pkcs12 -export -legacy -name lab-device-01 \
-  -out "$OUT/certs/client.p12" \
-  -inkey "$OUT/certs/client-key.pem" \
-  -in "$OUT/certs/client.pem" \
-  -certfile "$OUT/certs/ca.pem" \
+  -out "$CERTS_DIR/client.p12" \
+  -inkey "$CERTS_DIR/client-key.pem" \
+  -in "$CERTS_DIR/client.pem" \
+  -certfile "$CERTS_DIR/ca.pem" \
   -passout pass:
 case "$MODE" in
-  true) FLAGS='{"disallowAddUser": true}' ;;
+  true|true-then-false) FLAGS='{"disallowAddUser": true}' ;;
   false) FLAGS='{"disallowAddUser": false}' ;;
   absent) FLAGS='{}' ;;
 esac
@@ -423,8 +445,8 @@ cat >"$OUT/desired.json" <<JSON
 JSON
 echo "== desired.json =="
 cat "$OUT/desired.json"
-adb -s "$SERIAL" push "$OUT/certs/client.p12" /data/local/tmp/mdm-phase4-client.p12
-adb -s "$SERIAL" push "$OUT/certs/ca.pem" /data/local/tmp/mdm-phase4-ca.pem
+adb -s "$SERIAL" push "$CERTS_DIR/client.p12" /data/local/tmp/mdm-phase4-client.p12
+adb -s "$SERIAL" push "$CERTS_DIR/ca.pem" /data/local/tmp/mdm-phase4-ca.pem
 adb -s "$SERIAL" shell chmod 644 /data/local/tmp/mdm-phase4-client.p12 /data/local/tmp/mdm-phase4-ca.pem
 adb -s "$SERIAL" shell run-as "$PKG" mkdir -p app_mtls
 adb -s "$SERIAL" shell run-as "$PKG" cp /data/local/tmp/mdm-phase4-client.p12 app_mtls/client.p12
@@ -466,7 +488,7 @@ trap cleanup EXIT
 echo "== lab server (new sqlite) =="
 rm -f "$OUT/fleet.sqlite" "$OUT/fleet.sqlite-wal" "$OUT/fleet.sqlite-shm" "$OUT/lab.log"
 python3 "$ROOT/server/lab_checkin.py" \
-  --certs "$OUT/certs" \
+  --certs "$CERTS_DIR" \
   --host 127.0.0.1 \
   --port "$PORT" \
   --desired "$OUT/desired.json" \
@@ -523,21 +545,23 @@ set +e
 python3 "$ROOT/server/policy_restriction.py" \
   --restriction no_add_user \
   --device-policy "$OUT/device_policy.txt" \
-  --user "$OUT/dumpsys_user.txt" | tee "$OUT/restriction-match.txt"
-RESTRICT_RC=${PIPESTATUS[0]}
+  --user "$OUT/dumpsys_user.txt" \
+  >"$OUT/restriction-match.txt" 2>&1
+RESTRICT_RC=$?
 set -e
+cat "$OUT/restriction-match.txt"
 if [ "$RESTRICT_RC" -ne 0 ]; then
   fail "restriction no_add_user not applied (DISALLOW_ADD_USER=${MODE})"
 fi
-if [ "$MODE" != "true" ]; then
+if [ "$MODE" != "true" ] && [ "$MODE" != "true-then-false" ]; then
   fail "restriction no_add_user applied during negative mode (DISALLOW_ADD_USER=${MODE})"
 fi
 
 echo "== operator list =="
-BOUND="$(listeners_8787 || true)"
+BOUND="$(listeners_ui_port || true)"
 if [ -n "$BOUND" ]; then
   echo "$BOUND"
-  fail "port 8787 is already bound"
+  fail "port ${UI_PORT} is already bound"
 fi
 python3 "$ROOT/server/ui_server.py" \
   --db "$OUT/fleet.sqlite" \
@@ -563,7 +587,7 @@ grep "fleet UI http://127.0.0.1:${UI_PORT}/" "$OUT/ui.log"
 
 BOUND=""
 for _ in $(seq 1 20); do
-  BOUND="$(listeners_8787 || true)"
+  BOUND="$(listeners_ui_port || true)"
   if printf '%s\n' "$BOUND" | grep -qx "127.0.0.1:${UI_PORT}"; then
     break
   fi
@@ -595,5 +619,51 @@ echo "operator page HTTP ${INDEX_CODE}"
 [ "$INDEX_CODE" = "200" ] || fail "step operator-list: operator page HTTP ${INDEX_CODE}"
 grep -qi '<html' "$OUT/ui-index.html" || fail "step operator-list: operator page is not HTML"
 
-echo "PASS: no_add_user applied via policyFlags.disallowAddUser=true; operator list on 127.0.0.1:8787 shows deviceId=${DEVICE_ID}. AOSP ATD emulator, not GrapheneOS; attestation not asserted."
+if [ "$MODE" = "true-then-false" ]; then
+  echo "== clear (disallowAddUser=false, no owner reset) =="
+  # Same device owner, same app data, same sqlite. The operator path is a
+  # per-device override; lab_checkin.py reads it on the next check-in.
+  cat >"$OUT/desired-false.json" <<'JSON'
+{
+  "schemaVersion": 1,
+  "requiredPackages": [],
+  "policyFlags": {"disallowAddUser": false},
+  "commands": [{"type": "noop", "id": "emulator-phase5-clear"}]
+}
+JSON
+  cat "$OUT/desired-false.json"
+  python3 "$ROOT/server/fleet_store.py" --db "$OUT/fleet.sqlite" set-desired "$DEVICE_ID" "$OUT/desired-false.json" \
+    || fail "step clear: fleet_store set-desired failed"
+  OWNERS="$(adb -s "$SERIAL" shell dpm list-owners 2>&1 | tr -d '\r')"
+  echo "$OWNERS"
+  echo "$OWNERS" | grep -q "$PKG" || fail "step clear: $PKG is no longer device owner before the false check-in"
+  broadcast_lab "clear"
+  wait_for_n "lab-checkin SUCCESS" 2 outcome_count
+  wait_for_n "check-in lines" 2 checkin_count
+  wait_for_policy_applied 2
+  grep "check-in deviceId=" "$OUT/lab.log"
+  adb -s "$SERIAL" shell dumpsys device_policy >"$OUT/device_policy-after-false.txt" \
+    || fail "step clear: dumpsys device_policy failed"
+  adb -s "$SERIAL" shell dumpsys user >"$OUT/dumpsys_user-after-false.txt" \
+    || fail "step clear: dumpsys user failed"
+  set +e
+  python3 "$ROOT/server/policy_restriction.py" \
+    --restriction no_add_user \
+    --device-policy "$OUT/device_policy-after-false.txt" \
+    --user "$OUT/dumpsys_user-after-false.txt" \
+    >"$OUT/restriction-after-false.txt" 2>&1
+  CLEAR_RC=$?
+  set -e
+  cat "$OUT/restriction-after-false.txt"
+  if [ "$CLEAR_RC" -eq 0 ]; then
+    fail "step clear: no_add_user still applied after disallowAddUser=false"
+  fi
+  OWNERS="$(adb -s "$SERIAL" shell dpm list-owners 2>&1 | tr -d '\r')"
+  echo "$OWNERS" | grep -q "$PKG" || fail "step clear: $PKG is not device owner after the false check-in"
+  echo "PASS: no_add_user applied via disallowAddUser=true, then cleared by disallowAddUser=false with no owner reset; deviceId=${DEVICE_ID}. AOSP ATD emulator, not GrapheneOS; attestation not asserted."
+  echo "result file: $OUT/result.txt"
+  exit 0
+fi
+
+echo "PASS: no_add_user applied via policyFlags.disallowAddUser=true; operator list on 127.0.0.1:${UI_PORT} shows deviceId=${DEVICE_ID}. AOSP ATD emulator, not GrapheneOS; attestation not asserted."
 echo "result file: $OUT/result.txt"

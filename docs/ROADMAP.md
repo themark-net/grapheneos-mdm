@@ -43,19 +43,23 @@ Out of this phase, still: CI, GrapheneOS, issue #8. The operator page and `disal
 
 ### Phase 4 — Emulator policy on the operator page
 
-**org-can-do.** Implemented on `build/p4-disallow-add-user` (issue #45 PR), bench log in [docs/EMULATOR.md](EMULATOR.md). Still not Feature GO. Issue #45.
+**org-can-do.** Merged as PR #46 (squash `51c6c3b`), bench log in [docs/EMULATOR.md](EMULATOR.md). Still not Feature GO. Issue #45.
 
 Script: [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). One check-in on the AOSP ATD bench. `DISALLOW_ADD_USER` selects `policyFlags.disallowAddUser` (`true`, `false`, or absent). The desired state names no catalog APK. After check-in, [server/policy_restriction.py](../server/policy_restriction.py) reads `dumpsys device_policy` and `dumpsys user` for an applied `no_add_user`. `ui_server.py` on 127.0.0.1:8787 lists that device id. The script log order is enroll, check-in, restriction, operator list. `false` and `absent` are expected to fail at the restriction step. No wipe. The image is an AOSP ATD emulator. Attestation is not asserted.
 
 Bench result (2026-10-09, nimo): `false` and `absent` FAIL at the restriction step, `true` PASSes with `no_add_user` applied and the device id listed on 127.0.0.1:8787. Log: [docs/EMULATOR.md](EMULATOR.md#bench-log-2026-10-09).
 
-## Next slice — Phase 5 — Run the operate script on a KVM runner
+### Phase 5 — Run the operate script on a GitHub-hosted KVM runner
 
-**org-can-do**, after Phase 4's script is the thing worth gating.
+**org-can-do.** Issue #47, branch `build/p5-gha-kvm`. Not Feature GO. Handoff: [docs/ops/HANDOFF-p5-gha-kvm-2026-10-09.md](ops/HANDOFF-p5-gha-kvm-2026-10-09.md).
 
-Phase 4's script is [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). Its bench log is in [docs/EMULATOR.md](EMULATOR.md#bench-log-2026-10-09).
+[.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml) boots the AOSP ATD Android 15 emulator (`api-level 35`, `aosp_atd`, `x86_64`) on a free `ubuntu-latest` runner with KVM enabled by a udev rule. No self-hosted runner. [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh) runs [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh) as `absent` and `false` (exit 1 asserted), `true-then-false` (true applies `no_add_user`, a second check-in with `false` and no owner reset clears it; exit 0) and `true` (exit 0), then asserts the post-run state: device owner and `no_add_user` applied. Logs upload as the `emulator-policy-logs` artifact. Triggers are path-filtered `pull_request` / `push` to `main`, plus `workflow_dispatch`. The image is not GrapheneOS. Attestation is not asserted. Procedure: [docs/EMULATOR.md](EMULATOR.md#phase-5--github-hosted-kvm-runner).
 
-`.github/workflows/ci.yml` installs platform 35 and build-tools. It does not install `emulator` or `system-images;android-35;aosp_atd;x86_64`. The bench script expects a local SDK (`ANDROID_HOME`), AVD `mdm36`, and `adb` ports 5574/5575. A CI job has to provide that image and KVM. Until a runner has both, the gate stays a documented script that fails locally, which Phase 2 already has for device-owner plus a single check-in.
+`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last code SHA. The green emulator run on that SHA is https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590 (job `AOSP ATD emulator policy (disallowAddUser)`). Docs head `5a4e8f1` (`5a4e8f1a9f7417e208e579a079af4c893fa7ba59`) ran the same job at https://github.com/themark-net/grapheneos-mdm/actions/runs/37977122809. `pull_request` path filters match the whole PR diff, so a docs-only head still re-runs the job while the PR changes a listed path.
+
+## Next slice
+
+Not chosen yet. Candidates that stay org-can-do: gate one more `policyFlags` restriction in the same CI job, or put the Phase 3 same-database script on the same runner (it records `chain_invalid`; that is a record, not attestation success). Pick one with the founder before starting.
 
 ## Founder-needed
 
