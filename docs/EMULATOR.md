@@ -278,7 +278,7 @@ Path filters, the single boot retry, and `workflow_dispatch` are unchanged. Ther
 
 ### CI result
 
-`06e37d8` (`06e37d808f124623104368f0b6fb1d7e3de55bc3`) is the code SHA. Green run on that SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/38284918877, job `AOSP ATD emulator policy (disallowAddUser, disallowFactoryReset)`. The boot retry step was skipped. The fingerprint was `Android/sdk_slim_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys`. The image is an AOSP ATD emulator, not GrapheneOS. Attestation was not asserted. `pull_request` path filters match the whole PR diff, so a docs-only head re-runs this job. That later run is not cited here.
+`ef5b380` (`ef5b38089fcab96c616547adc18f58b879e66e62`) is the code SHA. Green run on that SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/38287586817, job `AOSP ATD emulator policy (disallowAddUser, disallowFactoryReset)`. The boot retry step was skipped. The fingerprint was `Android/sdk_slim_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys`. The image is an AOSP ATD emulator, not GrapheneOS. Attestation was not asserted. `pull_request` path filters match the whole PR diff, so a docs-only head re-runs this job. That later run is not cited here.
 
 ```
 ASSERT OK: leg absent DISALLOW_ADD_USER=absent exit=1 expected=1
@@ -298,4 +298,4 @@ ASSERT OK: no fleet.sqlite* under /tmp/mdm-ci
 RESULT: PASS (AOSP ATD emulator, not GrapheneOS; attestation not asserted)
 ```
 
-Protocol schemas and Android unit tests on the same code SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/38284918875
+Protocol schemas and Android unit tests on the same code SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/38287586836
