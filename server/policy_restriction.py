@@ -6,7 +6,10 @@ matching lines when the restriction is applied. Exits 1 when it is not.
 
 A match is a whole restriction token. `no_add_user` does not match
 `no_add_managed_profile`, `no_add_clone_profile`, or `no_add_private_profile`.
-A line that sets the token to false is not a match.
+The same rules apply to `no_factory_reset` (`UserManager.DISALLOW_FACTORY_RESET`).
+A line that sets the token to false is not a match. When the token is absent
+the process prints `restriction <token> is not applied` on stderr and exits 1.
+That sentence is the clear-leg proof; any other non-zero exit is not.
 
 dumpsys user evidence is a line inside one of these blocks:
 

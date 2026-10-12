@@ -1,9 +1,11 @@
 name: Emulator policy (AOSP ATD)
 
-# Phase 5 (issue #47). Runs scripts/emulator-policy-disallow-add-user.sh on a
-# GitHub-hosted ubuntu-latest runner with KVM. The image is the AOSP ATD
-# Android 15 emulator (system-images;android-35;aosp_atd;x86_64). It is not
-# GrapheneOS, and attestation is not asserted.
+# Phase 5 (issue #47) and Phase 6 (issue #49). Runs
+# scripts/emulator-policy-disallow-add-user.sh on a GitHub-hosted
+# ubuntu-latest runner with KVM, for disallowAddUser and
+# disallowFactoryReset. The image is the AOSP ATD Android 15 emulator
+# (system-images;android-35;aosp_atd;x86_64). It is not GrapheneOS, and
+# attestation is not asserted. The script does not factory-reset or wipe.
 #
 # Boot retry: the emulator-runner step runs once. If it fails before
 # scripts/ci-emulator-policy.sh creates /tmp/mdm-ci/script-started, the same
@@ -47,7 +49,7 @@ concurrency:
 
 jobs:
   emulator-policy:
-    name: AOSP ATD emulator policy (disallowAddUser)
+    name: AOSP ATD emulator policy (disallowAddUser, disallowFactoryReset)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -140,5 +142,15 @@ jobs:
             !/tmp/mdm-ci/**/*.p12
             !/tmp/mdm-ci/**/*.key
             !/tmp/mdm-ci/**/*.crt
+            !/tmp/mdm-ci/**/*.der
+            !/tmp/mdm-ci/**/*.cer
+            !/tmp/mdm-ci/**/*.pfx
+            !/tmp/mdm-ci/**/*.jks
+            !/tmp/mdm-ci/**/*.keystore
+            !/tmp/mdm-ci/**/*.csr
+            !/tmp/mdm-ci/**/fleet.sqlite
+            !/tmp/mdm-ci/**/fleet.sqlite-wal
+            !/tmp/mdm-ci/**/fleet.sqlite-shm
+            !/tmp/mdm-ci/**/fleet.sqlite*
           if-no-files-found: warn
           retention-days: 14

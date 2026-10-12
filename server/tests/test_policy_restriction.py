@@ -195,6 +195,54 @@ _POLICY_ANDROID15_RESOLVED_NULL = """\
     
 """
 
+# Same Android 15 shape as the add-user capture, with the factory-reset token.
+_POLICY_ANDROID15_FACTORY_TRUE = """\
+  Global Policies: 
+    UserRestrictionPolicyKey userRestriction_no_factory_reset
+      Per-admin Policy:
+        EnforcingAdmin { mPackageName= net.themark.grapheneosmdm, mAuthorities= [enterprise], mUserId= 0 }
+          BooleanPolicyValue { mValue= true }
+      Resolved Policy (MostRestrictive):
+        BooleanPolicyValue { mValue= true }
+"""
+
+_USER_FACTORY = """\
+Users:
+  UserInfo{0:Owner:c13} serialNo=0 isPrimary=true
+    Restrictions:
+      none
+    Device policy global restrictions:
+      no_factory_reset
+    Effective restrictions:
+      no_factory_reset
+"""
+
+_POLICY_FACTORY_FALSE = """\
+DevicePolicyEngine:
+  Local policies:
+    User 0:
+      UserRestrictionPolicyKey userRestriction_no_factory_reset
+        Per-admin Policy:
+          net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver
+            BooleanPolicyValue { mValue= false }
+        Resolved Policy (MostRestrictive):
+          BooleanPolicyValue { mValue= false }
+  Legacy user restrictions:
+    Bundle[{no_factory_reset=false, no_config_wifi=true}]
+"""
+
+_USER_FACTORY_FALSE = """\
+Users:
+  UserInfo{0:Owner:c13} serialNo=0 isPrimary=true
+    Restrictions:
+      none
+    Device policy global restrictions:
+      none
+    Effective restrictions:
+      no_config_wifi
+      no_factory_reset=false
+"""
+
 _USER_NONE = """\
 Users:
   UserInfo{0:Owner:c13} serialNo=0 isPrimary=true
@@ -210,7 +258,12 @@ Users:
 
 
 class PolicyRestrictionTest(unittest.TestCase):
-    def _run(self, device_policy: str, user_dump: str) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self,
+        device_policy: str,
+        user_dump: str,
+        restriction: str = "no_add_user",
+    ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             policy_path = root / "device_policy.txt"
@@ -221,7 +274,7 @@ class PolicyRestrictionTest(unittest.TestCase):
                 [
                     *CLI,
                     "--restriction",
-                    "no_add_user",
+                    restriction,
                     "--device-policy",
                     str(policy_path),
                     "--user",
@@ -231,6 +284,15 @@ class PolicyRestrictionTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
+
+    def _assert_not_applied(
+        self,
+        proc: subprocess.CompletedProcess[str],
+        restriction: str = "no_add_user",
+    ) -> None:
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertEqual(proc.stdout, "")
+        self.assertIn(f"restriction {restriction} is not applied", proc.stderr)
 
     def test_user_effective_block_is_applied(self) -> None:
         proc = self._run(_POLICY_OTHER, _USER_EFFECTIVE)
@@ -249,18 +311,15 @@ class PolicyRestrictionTest(unittest.TestCase):
 
     def test_sibling_profile_restrictions_are_not_add_user(self) -> None:
         proc = self._run(_POLICY_SIBLINGS, _USER_SIBLINGS)
-        self.assertEqual(proc.returncode, 1, proc.stdout)
-        self.assertEqual(proc.stdout, "")
+        self._assert_not_applied(proc)
 
     def test_explicit_false_is_not_applied(self) -> None:
         proc = self._run(_POLICY_EXPLICIT_FALSE, _USER_EXPLICIT_FALSE)
-        self.assertEqual(proc.returncode, 1, proc.stdout)
-        self.assertEqual(proc.stdout, "")
+        self._assert_not_applied(proc)
 
     def test_empty_dumps_are_not_applied(self) -> None:
         proc = self._run("", "")
-        self.assertEqual(proc.returncode, 1, proc.stdout)
-        self.assertEqual(proc.stdout, "")
+        self._assert_not_applied(proc)
 
 
     def test_android15_prefixed_policy_key_is_applied(self) -> None:
@@ -270,8 +329,28 @@ class PolicyRestrictionTest(unittest.TestCase):
 
     def test_android15_resolved_null_is_not_applied(self) -> None:
         proc = self._run(_POLICY_ANDROID15_RESOLVED_NULL, _USER_NONE)
-        self.assertEqual(proc.returncode, 1, proc.stdout)
-        self.assertEqual(proc.stdout, "")
+        self._assert_not_applied(proc)
+
+    def test_android15_factory_reset_key_is_applied(self) -> None:
+        proc = self._run(_POLICY_ANDROID15_FACTORY_TRUE, _USER_FACTORY, "no_factory_reset")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("userRestriction_no_factory_reset", proc.stdout)
+        self.assertTrue(
+            any(line.strip() == "no_factory_reset" for line in proc.stdout.splitlines()),
+            proc.stdout,
+        )
+
+    def test_factory_reset_explicit_false_names_the_clear_message(self) -> None:
+        proc = self._run(_POLICY_FACTORY_FALSE, _USER_FACTORY_FALSE, "no_factory_reset")
+        self._assert_not_applied(proc, "no_factory_reset")
+
+    def test_factory_reset_dump_is_not_add_user(self) -> None:
+        proc = self._run(_POLICY_ANDROID15_FACTORY_TRUE, _USER_FACTORY, "no_add_user")
+        self._assert_not_applied(proc, "no_add_user")
+
+    def test_add_user_dump_is_not_factory_reset(self) -> None:
+        proc = self._run(_POLICY_ANDROID15_GLOBAL_TRUE, _USER_EFFECTIVE, "no_factory_reset")
+        self._assert_not_applied(proc, "no_factory_reset")
 
 if __name__ == "__main__":
     unittest.main()

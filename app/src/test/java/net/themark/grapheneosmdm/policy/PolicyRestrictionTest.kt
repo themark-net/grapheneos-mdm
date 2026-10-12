@@ -45,8 +45,19 @@ class PolicyRestrictionTest {
                 disallowUserSwitch = false,
             ),
         )
-        assertTrue(updates.all { !it.second })
-        assertEquals(6, updates.size)
+        assertEquals(
+            listOf(
+                UserManager.DISALLOW_ADD_USER to false,
+                UserManager.DISALLOW_FACTORY_RESET to false,
+                UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES to false,
+                UserManager.DISALLOW_CONFIG_WIFI to false,
+                UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS to false,
+                UserManager.DISALLOW_USER_SWITCH to false,
+            ),
+            updates,
+        )
+        assertEquals("no_factory_reset", UserManager.DISALLOW_FACTORY_RESET)
+        assertEquals("no_add_user", UserManager.DISALLOW_ADD_USER)
     }
 
     @Test

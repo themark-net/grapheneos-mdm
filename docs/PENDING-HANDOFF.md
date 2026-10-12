@@ -2,14 +2,14 @@
 
 Continuation note for the next harness. Read [docs/ROADMAP.md](ROADMAP.md) for the next slice. Issue **#8** stays closed. Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner. That gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
 
-Updated 2026-10-09 on `build/p5-gha-kvm` (Phase 5, issue #47). `main` is at `51c6c3b` (`51c6c3bd9e186a6879f9fb118e74d337ea477528`, PR #46, Phase 4). This file describes what the Phase 5 merge lands. Read `git rev-parse HEAD` on `main` for the merged tip.
+Updated 2026-10-12 on `build/p6-factory-reset` (Phase 6, issue #49). `main` is at `e43fc37` (`e43fc37fab1959cfa59764c6fb5abb6811334976`, PR #48, Phase 5). This file describes what the Phase 6 merge lands. Read `git rev-parse HEAD` on `main` for the merged tip.
 
 ## 1. Tip
 
 | | |
 | --- | --- |
-| Branch before merge | `main` at `51c6c3b` (Phase 4, PR #46) |
-| This change | Phase 5: the Phase 4 operate script on a GitHub-hosted KVM runner (issue #47) |
+| Branch before merge | `main` at `e43fc37` (Phase 5, PR #48) |
+| This change | Phase 6: `policyFlags.disallowFactoryReset` on the same GitHub-hosted KVM job (issue #49), plus the #48 artifact hygiene |
 | Earlier tips | `4784a79` Phase 3 (#44), `ed62c4a` docs handoff (#43) |
 | Ancestor feature | `b5fd229` (`b5fd229f86326b7c428365c8f49b6fb218a6d002`), Android emulator device-owner (#38) |
 
@@ -87,7 +87,15 @@ Issue #47. Branch `build/p5-gha-kvm`, based on `main` at `51c6c3b` (PR #46 merge
 
 [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml) runs on `ubuntu-latest` (no self-hosted runner). It enables `/dev/kvm` with a udev rule, installs JDK 17, Gradle 8.9 and Python 3.12 with setup actions, and boots `system-images;android-35;aosp_atd;x86_64` with `reactivecircus/android-emulator-runner` v2.38.0 (pinned by SHA). [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh) runs the operate script four times and asserts each exit code: `absent` 1, `false` 1, `true-then-false` 0, `true` 0. It then asserts the post-run state: this app is device owner and `no_add_user` is applied. Triggers are `pull_request` and `push` to `main` filtered to the script, `server/**`, `app/**`, `protocol/**`, Gradle files and the workflow, plus `workflow_dispatch`. No cron. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
 
-`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last code SHA. Green emulator run on that SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590. Docs head `5a4e8f1` (`5a4e8f1a9f7417e208e579a079af4c893fa7ba59`) also ran it: https://github.com/themark-net/grapheneos-mdm/actions/runs/37977122809. `pull_request` path filters match the whole PR diff, so a docs-only head still re-runs the job while the PR changes a listed path.
+`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last Phase 5 code SHA. Green emulator run on that SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590. Docs head `5a4e8f1` (`5a4e8f1a9f7417e208e579a079af4c893fa7ba59`) also ran it: https://github.com/themark-net/grapheneos-mdm/actions/runs/37977122809. `pull_request` path filters match the whole PR diff, so a docs-only head still re-runs the job while the PR changes a listed path.
+
+### disallowFactoryReset on the KVM job — Phase 6
+
+Issue #49. Branch `build/p6-factory-reset`, based on `main` at `e43fc37` (PR #48 merged). Handoff: [docs/ops/HANDOFF-p6-factory-reset-2026-10-12.md](ops/HANDOFF-p6-factory-reset-2026-10-12.md). Decisions: [docs/ops/AUTONOMOUS-DECISIONS-2026-10-12.md](ops/AUTONOMOUS-DECISIONS-2026-10-12.md).
+
+The same [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml) job runs on `ubuntu-latest` (no self-hosted runner). [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh) keeps the four disallowAddUser legs and their post-run check, then runs [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh) with `RESTRICTION=disallowFactoryReset`: `absent` and `false` exit 1, `true-then-false` and `true` exit 0. The dumpsys token is `no_factory_reset`. The clear leg requires the line `restriction no_factory_reset is not applied`. The script does not factory-reset or wipe. The upload excludes `fleet.sqlite*` and the certificate suffixes `.pem`, `.key`, `.p12`, `.crt`, `.der`, `.cer`, `.pfx`, `.jks`, `.keystore`, `.csr`. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
+
+The code-SHA run URL is added once that emulator job is green.
 
 ### Earlier squash merges
 
@@ -121,7 +129,7 @@ Issue #8 stays closed. The wizard gap is upstream SetupWizard2 PR #40, unchanged
 
 Founder draft PR **#42** (`founder-build-babysit/2026-10-05`) is not the next slice. Leave it untouched.
 
-Phase 5 (issue #47) runs the Phase 4 operate script on a GitHub-hosted KVM runner; see the Phase 5 section above. Phase 4 and Phase 5 are not Feature GO. The next slice after Phase 5 is in [docs/ROADMAP.md](ROADMAP.md).
+Phase 5 (issue #47) runs the Phase 4 operate script on a GitHub-hosted KVM runner; see the Phase 5 section above. Phase 6 (issue #49) gates `disallowFactoryReset` on that same job. Phase 4, Phase 5, and Phase 6 are not Feature GO. The next slice after Phase 6 is in [docs/ROADMAP.md](ROADMAP.md). The parked candidate is the Phase 3 same-database script on this runner. That records `chain_invalid`. It is not attestation success.
 
 ## 4. Boundaries
 
@@ -137,9 +145,10 @@ These are the standing limits. Feature work and emulator demos are not frozen.
 
 - [docs/ROADMAP.md](ROADMAP.md) — phases, the next slice, and its definition of done.
 - [docs/ENROLLMENT.md](ENROLLMENT.md) — ADB Device Owner on a clean Pixel. QR needs a wizard that launches ManagedProvisioning.
-- [docs/EMULATOR.md](EMULATOR.md) — AOSP ATD device-owner bench (#36 / #38), Phase 3 same-database attestation, and Phase 4 disallowAddUser (issue #45).
+- [docs/EMULATOR.md](EMULATOR.md) — AOSP ATD device-owner bench (#36 / #38), Phase 3 same-database attestation, Phase 4 disallowAddUser (issue #45), and Phase 6 disallowFactoryReset (issue #49).
 - [docs/ops/HANDOFF-p4-disallow-add-user-2026-10-09.md](ops/HANDOFF-p4-disallow-add-user-2026-10-09.md) — Phase 4 handoff.
 - [docs/ops/HANDOFF-p5-gha-kvm-2026-10-09.md](ops/HANDOFF-p5-gha-kvm-2026-10-09.md) — Phase 5 handoff (GitHub-hosted KVM runner).
+- [docs/ops/HANDOFF-p6-factory-reset-2026-10-12.md](ops/HANDOFF-p6-factory-reset-2026-10-12.md) — Phase 6 handoff (`disallowFactoryReset` on that job).
 - [docs/MTLS.md](MTLS.md) — mTLS check-in, lab `--db`, fleet CA alignment.
 - [docs/SCHEDULING.md](SCHEDULING.md) — WorkManager periodic check-in and `checkin_now`.
 - [docs/design/](design/) — operator journey, wireframes, wipe gate.
@@ -157,4 +166,5 @@ Use the procedures in those docs.
 - Same-database attestation (Phase 3): [scripts/emulator-same-db-attestation.sh](../scripts/emulator-same-db-attestation.sh). Two check-ins, one new sqlite. Quote the second `attestationStatus`. `chain_invalid` on userdebug/test-keys is the expected record, not `ok`.
 - disallowAddUser on the operator page (Phase 4, issue #45): [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). One check-in. `DISALLOW_ADD_USER=false` and `absent` are expected to fail. Do not read the run as attestation success.
 - Phase 5 on GitHub Actions (issue #47): [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml) runs [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh) on an AOSP ATD emulator. `workflow_dispatch` runs it by hand. Logs are the `emulator-policy-logs` artifact.
+- disallowFactoryReset on that job (Phase 6, issue #49): `RESTRICTION=disallowFactoryReset`. `DISALLOW_FACTORY_RESET=false` and `absent` are expected to fail. Do not factory-reset the emulator. Do not read the run as attestation success or as GrapheneOS.
 - Pixel enrollment, when the founder is at the hardware: [docs/ENROLLMENT.md](ENROLLMENT.md).
