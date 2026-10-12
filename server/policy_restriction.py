@@ -2,11 +2,18 @@
 """Report whether a user restriction is applied in dumpsys text.
 
 Reads `dumpsys device_policy` and `dumpsys user`. Exits 0 and prints the
-matching lines when the restriction is applied. Exits 1 when it is not.
+matching lines when the restriction is applied. Exits 1 when a recognised
+dumpsys does not show it applied. Exits 2 when the input is empty or
+unrecognised. Exit 2 is not a clear.
 
 A match is a whole restriction token. `no_add_user` does not match
 `no_add_managed_profile`, `no_add_clone_profile`, or `no_add_private_profile`.
-A line that sets the token to false is not a match.
+The same rules apply to `no_factory_reset` (`UserManager.DISALLOW_FACTORY_RESET`).
+A line that sets the token to false is not a match. When a recognised
+dumpsys does not show the token, the process prints
+`restriction <token> is not applied` on stderr and exits 1. That sentence
+plus exit 1 is the clear-leg proof. Empty text, or text with no dumpsys
+marker, prints `dumpsys input is empty or unrecognised` and exits 2.
 
 dumpsys user evidence is a line inside one of these blocks:
 
@@ -70,6 +77,9 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as exc:
         print(f"could not read dumpsys file: {exc}", file=sys.stderr)
         return 1
+    if dumpsys_input_problem(device_policy, user_dump) is not None:
+        print("dumpsys input is empty or unrecognised", file=sys.stderr)
+        return 2
     try:
         lines = applied_lines(device_policy, user_dump, args.restriction)
     except ValueError as exc:
@@ -81,6 +91,33 @@ def main(argv: list[str] | None = None) -> int:
     for line in lines:
         print(line)
     return 0
+
+
+# A capture that lacks every one of these is not a dumpsys. "Users:" alone
+# is enough for the user dump; the clear leg also requires a device_policy
+# marker before it will treat exit 1 as a clear.
+_DUMP_MARKERS = (
+    "DevicePolicyEngine",
+    "UserRestrictionPolicyKey",
+    "Device Owner",
+    "DeviceOwner",
+    "Effective restrictions:",
+    "Device policy global restrictions:",
+    "Device policy local restrictions:",
+    "Device policy restrictions:",
+    "Users:",
+    "UserInfo{",
+)
+
+
+def dumpsys_input_problem(device_policy: str, user_dump: str) -> str | None:
+    """'empty' or 'unrecognised' when this capture must not count as a clear."""
+    if not device_policy.strip() and not user_dump.strip():
+        return "empty"
+    blob = f"{device_policy}\n{user_dump}"
+    if not any(marker in blob for marker in _DUMP_MARKERS):
+        return "unrecognised"
+    return None
 
 
 def _normalize(text: str) -> str:

@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
-# Phase 4 (issue #45): disallowAddUser on the AOSP ATD emulator, then the
-# localhost operator list.
+# Phase 4 (issue #45) and Phase 6 (issue #49): one user restriction on the
+# AOSP ATD emulator, then the localhost operator list.
 #
 # This is an AOSP ATD emulator (system-images;android-35;aosp_atd;x86_64).
 # Not GrapheneOS. Issue #8 stays closed. Attestation is not asserted.
 # verified boot is not claimed. Draft PR #42 is not touched.
 #
-# DISALLOW_ADD_USER=true|false|absent|true-then-false (default true)
-# chooses policyFlags. true sets disallowAddUser true. false sets it false.
-# absent sends {}. true-then-false (Phase 5) applies true exactly like the
-# true mode, then, with no owner reset and no pm clear, sets a per-device
-# override {"disallowAddUser": false} in the same sqlite, broadcasts a
-# second check-in, and requires no_add_user to be gone
-# (clearUserRestriction). Anything else exits before the emulator is
-# touched.
+# RESTRICTION=disallowAddUser|disallowFactoryReset (default disallowAddUser).
+#   disallowAddUser       dumpsys token no_add_user       mode DISALLOW_ADD_USER
+#   disallowFactoryReset  dumpsys token no_factory_reset  mode DISALLOW_FACTORY_RESET
+# The mode is true|false|absent|true-then-false (default true).
+# true sets that policyFlags boolean true. false sets it false.
+# absent sends {}. true-then-false applies true exactly like the true mode,
+# then, with no owner reset and no pm clear, sets a per-device override
+# {"<flag>": false} in the same sqlite, broadcasts a second check-in, and
+# requires the dumpsys token to be gone. Gone means the after-false
+# device_policy dump is non-empty and contains DevicePolicyEngine,
+# UserRestrictionPolicyKey, or a Device Owner line, and policy_restriction.py
+# exits 1 and prints "restriction <token> is not applied". Exit 2 (empty or
+# unrecognised dumpsys) is a failed clear. A bad RESTRICTION or mode, or
+# both mode env vars set at once, exits before the emulator is touched.
+#
+# disallowFactoryReset only sets or clears the user restriction
+# no_factory_reset. This script does not factory-reset, wipe, or pass
+# -wipe-data.
 #
 # Environment overrides (nimo defaults in brackets): SERIAL [emulator-5574],
 # ANDROID_ADB_SERVER_PORT [5038], AVD [mdm36], CONSOLE_PORT/ADB_PORT
@@ -29,7 +39,7 @@
 #
 # How this can fail / recover:
 # - Restriction not applied: exit non-zero naming that step
-#   (FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=<mode>)).
+#   (FAIL: restriction <token> not applied (<MODE_ENV>=<mode>)).
 #   Read PolicyManager logcat for the policyFlags parse and the line
 #   "Desired state policy flags applied". Fix the desired.json flag or the
 #   device-owner state, then run again. Do not claim the restriction applied.
@@ -39,16 +49,23 @@
 # - Emulator or KVM unavailable: that is a host blocker. Exit and keep the
 #   emulator log. Do not install qemu. Do not boot a second emulator when
 #   one is already on ports 5574,5575. Do not fake a PASS.
-# - DISALLOW_ADD_USER=false or absent is expected to FAIL. That is the
-#   negative proof: the restriction is not applied, so the script stops at
-#   the restriction step and does not print PASS.
-# - true-then-false: if no_add_user is still applied after the false
+# - Mode false or absent is expected to FAIL. That is the negative proof:
+#   the restriction is not applied, so the script stops at the restriction
+#   step and does not print PASS.
+# - true-then-false: if the token is still applied after the false
 #   check-in, exit non-zero with
-#   FAIL: step clear: no_add_user still applied after disallowAddUser=false.
+#   FAIL: step clear: <token> still applied after <flag>=false.
+#   The after-false device_policy dump must be non-empty and contain
+#   DevicePolicyEngine, UserRestrictionPolicyKey, or a Device Owner line.
+#   policy_restriction.py must exit 1 and print
+#   "restriction <token> is not applied". Exit 2 (empty or unrecognised
+#   dumpsys) is a failed clear. A read error is not a clear.
+# - Setting both DISALLOW_ADD_USER and DISALLOW_FACTORY_RESET is a fail
+#   before the emulator is used. Only the env var for RESTRICTION may be set.
 # - Post-run state: after a true run the emulator is left with this app as
-#   device owner and no_add_user set. After true-then-false the app is still
-#   device owner and no_add_user is cleared. The next run removes the
-#   test-only owner, which drops its restrictions.
+#   device owner and the selected token set. After true-then-false the app
+#   is still device owner and that token is cleared. The next run removes
+#   the test-only owner, which drops its restrictions.
 # - A device-owner package rejects pm clear. assembleDebug is not testOnly
 #   unless -Pandroid.injected.testOnly=true, and dpm remove-active-admin
 #   rejects a non-test owner. The testOnly bit is stored when the admin is
@@ -96,7 +113,7 @@ PORT="${PORT:-8443}"
 LAB_URL="https://127.0.0.1:${PORT}"
 UI_PORT="${UI_PORT:-8787}"
 CERTS_DIR="${CERTS_DIR:-$OUT/certs}"
-MODE="${DISALLOW_ADD_USER:-true}"
+RESTRICTION="${RESTRICTION:-disallowAddUser}"
 LAB_PID=""
 UI_PID=""
 
@@ -109,10 +126,86 @@ need() {
   command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"
 }
 
+case "$RESTRICTION" in
+  disallowAddUser)
+    FLAG_KEY="disallowAddUser"
+    TOKEN="no_add_user"
+    MODE_ENV="DISALLOW_ADD_USER"
+    PHASE_BANNER="phase 4 disallowAddUser on the operator page"
+    DESIRED_COMMAND_ID="emulator-phase4"
+    CLEAR_COMMAND_ID="emulator-phase5-clear"
+    ;;
+  disallowFactoryReset)
+    FLAG_KEY="disallowFactoryReset"
+    TOKEN="no_factory_reset"
+    MODE_ENV="DISALLOW_FACTORY_RESET"
+    PHASE_BANNER="phase 6 disallowFactoryReset on the operator page"
+    DESIRED_COMMAND_ID="emulator-phase6"
+    CLEAR_COMMAND_ID="emulator-phase6-clear"
+    ;;
+  *)
+    fail "RESTRICTION must be disallowAddUser or disallowFactoryReset (got: ${RESTRICTION})"
+    ;;
+esac
+
+MODE="${!MODE_ENV:-true}"
 case "$MODE" in
   true|false|absent|true-then-false) ;;
-  *) fail "DISALLOW_ADD_USER must be true, false, absent, or true-then-false (got: ${MODE})" ;;
+  *) fail "${MODE_ENV} must be true, false, absent, or true-then-false (got: ${MODE})" ;;
 esac
+
+if [ "$RESTRICTION" = "disallowAddUser" ] && [ -n "${DISALLOW_FACTORY_RESET+x}" ]; then
+  fail "DISALLOW_FACTORY_RESET must not be set when RESTRICTION=disallowAddUser (got: ${DISALLOW_FACTORY_RESET})"
+fi
+if [ "$RESTRICTION" = "disallowFactoryReset" ] && [ -n "${DISALLOW_ADD_USER+x}" ]; then
+  fail "DISALLOW_ADD_USER must not be set when RESTRICTION=disallowFactoryReset (got: ${DISALLOW_ADD_USER})"
+fi
+
+# Clear-leg gate. Exit via fail() unless the after-false capture is a real
+# dumpsys and policy_restriction.py exits 1 with the not-applied sentence.
+# CLEAR_LEG_STUB=1 runs only this gate, so a test can point DEVICE_POLICY_FILE
+# and USER_DUMP_FILE at a fake dumpsys. It does not boot an emulator.
+accept_cleared_restriction() {
+  local policy_file="$1" user_file="$2" out_file="$3"
+  local rc msg
+  if [ ! -s "$policy_file" ] || [ ! -s "$user_file" ]; then
+    fail "step clear: after-false dumpsys is empty"
+  fi
+  if ! grep -q -e 'DevicePolicyEngine' -e 'UserRestrictionPolicyKey' -e 'Device Owner' -e 'DeviceOwner' "$policy_file"; then
+    fail "step clear: after-false device_policy dump lacks DevicePolicyEngine, UserRestrictionPolicyKey, or Device Owner"
+  fi
+  set +e
+  python3 "$ROOT/server/policy_restriction.py" \
+    --restriction "$TOKEN" \
+    --device-policy "$policy_file" \
+    --user "$user_file" \
+    >"$out_file" 2>&1
+  rc=$?
+  set -e
+  cat "$out_file"
+  if [ "$rc" -eq 2 ]; then
+    fail "step clear: policy_restriction.py rejected empty or unrecognised dumpsys (exit=2)"
+  fi
+  if [ "$rc" -eq 0 ]; then
+    fail "step clear: ${TOKEN} still applied after ${FLAG_KEY}=false"
+  fi
+  if [ "$rc" -ne 1 ]; then
+    fail "step clear: policy_restriction.py exit=${rc}, expected 1"
+  fi
+  msg="restriction ${TOKEN} is not applied"
+  if ! grep -qF "$msg" "$out_file"; then
+    fail "step clear: policy_restriction.py did not report '${msg}' (exit=${rc})"
+  fi
+}
+
+if [ "${CLEAR_LEG_STUB:-}" = "1" ]; then
+  [ -n "${DEVICE_POLICY_FILE:-}" ] || fail "CLEAR_LEG_STUB requires DEVICE_POLICY_FILE"
+  [ -n "${USER_DUMP_FILE:-}" ] || fail "CLEAR_LEG_STUB requires USER_DUMP_FILE"
+  mkdir -p "${OUT:-/tmp}"
+  accept_cleared_restriction "$DEVICE_POLICY_FILE" "$USER_DUMP_FILE" "${OUT:-/tmp}/restriction-after-false.txt"
+  echo "PASS: clear leg accepted ${TOKEN}"
+  exit 0
+fi
 
 [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME" ] || fail "ANDROID_HOME is not a directory"
 [ -x "$JAVA_HOME/bin/java" ] || fail "JAVA_HOME has no java: $JAVA_HOME"
@@ -131,13 +224,15 @@ mkdir -p "$OUT"
 rm -f "$OUT/result.txt"
 exec > >(tee -a "$OUT/result.txt") 2>&1
 
-echo "== phase 4 disallowAddUser on the operator page =="
+echo "== ${PHASE_BANNER} =="
 echo "ROOT=$ROOT"
 echo "ANDROID_HOME=$ANDROID_HOME"
 echo "JAVA_HOME=$JAVA_HOME"
 echo "ANDROID_ADB_SERVER_PORT=$ANDROID_ADB_SERVER_PORT"
 echo "SERIAL=$SERIAL"
-echo "DISALLOW_ADD_USER=$MODE"
+echo "RESTRICTION=$RESTRICTION"
+echo "TOKEN=$TOKEN"
+echo "${MODE_ENV}=$MODE"
 echo "UI_PORT=$UI_PORT"
 echo "CERTS_DIR=$CERTS_DIR"
 echo "OUT=$OUT"
@@ -431,8 +526,8 @@ openssl pkcs12 -export -legacy -name lab-device-01 \
   -certfile "$CERTS_DIR/ca.pem" \
   -passout pass:
 case "$MODE" in
-  true|true-then-false) FLAGS='{"disallowAddUser": true}' ;;
-  false) FLAGS='{"disallowAddUser": false}' ;;
+  true|true-then-false) FLAGS="{\"${FLAG_KEY}\": true}" ;;
+  false) FLAGS="{\"${FLAG_KEY}\": false}" ;;
   absent) FLAGS='{}' ;;
 esac
 cat >"$OUT/desired.json" <<JSON
@@ -440,7 +535,7 @@ cat >"$OUT/desired.json" <<JSON
   "schemaVersion": 1,
   "requiredPackages": [],
   "policyFlags": $FLAGS,
-  "commands": [{"type": "noop", "id": "emulator-phase4"}]
+  "commands": [{"type": "noop", "id": "${DESIRED_COMMAND_ID}"}]
 }
 JSON
 echo "== desired.json =="
@@ -543,7 +638,7 @@ adb -s "$SERIAL" shell dumpsys user >"$OUT/dumpsys_user.txt" \
   || fail "step restriction: dumpsys user failed"
 set +e
 python3 "$ROOT/server/policy_restriction.py" \
-  --restriction no_add_user \
+  --restriction "$TOKEN" \
   --device-policy "$OUT/device_policy.txt" \
   --user "$OUT/dumpsys_user.txt" \
   >"$OUT/restriction-match.txt" 2>&1
@@ -551,10 +646,10 @@ RESTRICT_RC=$?
 set -e
 cat "$OUT/restriction-match.txt"
 if [ "$RESTRICT_RC" -ne 0 ]; then
-  fail "restriction no_add_user not applied (DISALLOW_ADD_USER=${MODE})"
+  fail "restriction ${TOKEN} not applied (${MODE_ENV}=${MODE})"
 fi
 if [ "$MODE" != "true" ] && [ "$MODE" != "true-then-false" ]; then
-  fail "restriction no_add_user applied during negative mode (DISALLOW_ADD_USER=${MODE})"
+  fail "restriction ${TOKEN} applied during negative mode (${MODE_ENV}=${MODE})"
 fi
 
 echo "== operator list =="
@@ -620,15 +715,16 @@ echo "operator page HTTP ${INDEX_CODE}"
 grep -qi '<html' "$OUT/ui-index.html" || fail "step operator-list: operator page is not HTML"
 
 if [ "$MODE" = "true-then-false" ]; then
-  echo "== clear (disallowAddUser=false, no owner reset) =="
+  echo "== clear (${FLAG_KEY}=false, no owner reset) =="
   # Same device owner, same app data, same sqlite. The operator path is a
   # per-device override; lab_checkin.py reads it on the next check-in.
-  cat >"$OUT/desired-false.json" <<'JSON'
+  # This does not factory-reset and does not wipe.
+  cat >"$OUT/desired-false.json" <<JSON
 {
   "schemaVersion": 1,
   "requiredPackages": [],
-  "policyFlags": {"disallowAddUser": false},
-  "commands": [{"type": "noop", "id": "emulator-phase5-clear"}]
+  "policyFlags": {"${FLAG_KEY}": false},
+  "commands": [{"type": "noop", "id": "${CLEAR_COMMAND_ID}"}]
 }
 JSON
   cat "$OUT/desired-false.json"
@@ -646,24 +742,16 @@ JSON
     || fail "step clear: dumpsys device_policy failed"
   adb -s "$SERIAL" shell dumpsys user >"$OUT/dumpsys_user-after-false.txt" \
     || fail "step clear: dumpsys user failed"
-  set +e
-  python3 "$ROOT/server/policy_restriction.py" \
-    --restriction no_add_user \
-    --device-policy "$OUT/device_policy-after-false.txt" \
-    --user "$OUT/dumpsys_user-after-false.txt" \
-    >"$OUT/restriction-after-false.txt" 2>&1
-  CLEAR_RC=$?
-  set -e
-  cat "$OUT/restriction-after-false.txt"
-  if [ "$CLEAR_RC" -eq 0 ]; then
-    fail "step clear: no_add_user still applied after disallowAddUser=false"
-  fi
+  accept_cleared_restriction \
+    "$OUT/device_policy-after-false.txt" \
+    "$OUT/dumpsys_user-after-false.txt" \
+    "$OUT/restriction-after-false.txt"
   OWNERS="$(adb -s "$SERIAL" shell dpm list-owners 2>&1 | tr -d '\r')"
   echo "$OWNERS" | grep -q "$PKG" || fail "step clear: $PKG is not device owner after the false check-in"
-  echo "PASS: no_add_user applied via disallowAddUser=true, then cleared by disallowAddUser=false with no owner reset; deviceId=${DEVICE_ID}. AOSP ATD emulator, not GrapheneOS; attestation not asserted."
+  echo "PASS: ${TOKEN} applied via ${FLAG_KEY}=true, then cleared by ${FLAG_KEY}=false with no owner reset; deviceId=${DEVICE_ID}. AOSP ATD emulator, not GrapheneOS; attestation not asserted."
   echo "result file: $OUT/result.txt"
   exit 0
 fi
 
-echo "PASS: no_add_user applied via policyFlags.disallowAddUser=true; operator list on 127.0.0.1:${UI_PORT} shows deviceId=${DEVICE_ID}. AOSP ATD emulator, not GrapheneOS; attestation not asserted."
+echo "PASS: ${TOKEN} applied via policyFlags.${FLAG_KEY}=true; operator list on 127.0.0.1:${UI_PORT} shows deviceId=${DEVICE_ID}. AOSP ATD emulator, not GrapheneOS; attestation not asserted."
 echo "result file: $OUT/result.txt"

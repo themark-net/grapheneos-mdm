@@ -24,5 +24,6 @@ No tautological or implementation-detail unit sprawl as Done.
 # Emulator bench shipped #36/#38 (AOSP ATD, not GrapheneOS): scripts/emulator-device-owner.sh
 # Phase 3 same-database attestation: scripts/emulator-same-db-attestation.sh
 # Phase 4 disallowAddUser on the operator page (issue #45): scripts/emulator-policy-disallow-add-user.sh
-# Next slice is docs/ROADMAP.md Phase 5 (operate script on a KVM runner)
+# Phase 5/6 KVM policy job (issues #47/#49): .github/workflows/emulator-policy.yml
+# Next slice is docs/ROADMAP.md (Phase 3 same-db on the runner is parked, not attestation)
 ```

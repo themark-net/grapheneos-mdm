@@ -15,9 +15,9 @@ The device-owner script is [scripts/emulator-device-owner.sh](../scripts/emulato
 
 The same-database attestation script is [scripts/emulator-same-db-attestation.sh](../scripts/emulator-same-db-attestation.sh). It is Phase 3. Details are in [Same-database attestation](#same-database-attestation-phase-3).
 
-The disallowAddUser script is [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). It is Phase 4 (issue #45). Details are in [Phase 4 — disallowAddUser on the operator page](#phase-4--disallowadduser-on-the-operator-page).
+The disallowAddUser script is [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). It is Phase 4 (issue #45). `RESTRICTION=disallowFactoryReset` is Phase 6 (issue #49). Details are in [Phase 4 — disallowAddUser on the operator page](#phase-4--disallowadduser-on-the-operator-page) and [Phase 6 — disallowFactoryReset](#phase-6--disallowfactoryreset-on-the-kvm-job).
 
-Phase 5 (issue #47) runs that script on a GitHub-hosted KVM runner. Details are in [Phase 5 — GitHub-hosted KVM runner](#phase-5--github-hosted-kvm-runner).
+Phase 5 (issue #47) runs that script on a GitHub-hosted KVM runner. Phase 6 adds the factory-reset legs to the same job. Details are in [Phase 5 — GitHub-hosted KVM runner](#phase-5--github-hosted-kvm-runner).
 
 ## SDK
 
@@ -119,7 +119,7 @@ The log order is enroll, check-in, restriction, operator list. Guest temp files 
 
 If the restriction is missing, the script exits non-zero and names that step. Read `PolicyManager` logcat for the policyFlags parse. If `UI_PORT` (default 8787) is busy, or the UI is bound to `0.0.0.0`, `*`, or `::`, the script exits and does not bind off 127.0.0.1. If the emulator or KVM is unavailable, that is a host blocker. Do not fake a PASS.
 
-`true-then-false` runs the `true` steps through the operator list, then writes `desired-false.json` (`{"disallowAddUser": false}`, noop id `emulator-phase5-clear`), stores it as a per-device override with `server/fleet_store.py --db … set-desired <deviceId>`, and broadcasts a second check-in. It does not remove the owner and does not `pm clear` in between. It waits for two `lab-checkin outcome=SUCCESS` lines, two `check-in deviceId=` lines and two `Desired state policy flags applied` lines, saves `device_policy-after-false.txt` and `dumpsys_user-after-false.txt`, and requires `policy_restriction.py` to exit 1 (not applied). Otherwise it exits with `FAIL: step clear: no_add_user still applied after disallowAddUser=false`. The agent maps `false` to `DevicePolicyManager.clearUserRestriction` (`PolicyManager.applyDesiredState`, covered by `PolicyRestrictionTest.falseFlagsClearRestrictions`).
+`true-then-false` runs the `true` steps through the operator list, then writes `desired-false.json` (`{"disallowAddUser": false}`, noop id `emulator-phase5-clear`), stores it as a per-device override with `server/fleet_store.py --db … set-desired <deviceId>`, and broadcasts a second check-in. It does not remove the owner and does not `pm clear` in between. It waits for two `lab-checkin outcome=SUCCESS` lines, two `check-in deviceId=` lines and two `Desired state policy flags applied` lines, saves `device_policy-after-false.txt` and `dumpsys_user-after-false.txt`, and requires the after-false `device_policy` dump to be non-empty and to contain `DevicePolicyEngine`, `UserRestrictionPolicyKey`, or a Device Owner line. `policy_restriction.py` must exit 1 and print `restriction no_add_user is not applied`. Exit 0 is `FAIL: step clear: no_add_user still applied after disallowAddUser=false`. Exit 2 (empty or unrecognised dumpsys) is a failed clear. Any other exit, or exit 1 without that sentence, is a failed clear. The agent maps `false` to `DevicePolicyManager.clearUserRestriction` (`PolicyManager.applyDesiredState`, covered by `PolicyRestrictionTest.falseFlagsClearRestrictions`).
 
 ### Post-run emulator state
 
@@ -140,6 +140,7 @@ The nimo defaults are unchanged. CI overrides them through [scripts/ci-emulator-
 | `PORT` | `8443` | `8443` |
 | `OUT` | `/tmp/mdm-phase4-policy` | `/tmp/mdm-ci/<leg>` |
 | `CERTS_DIR` | `$OUT/certs` | `/tmp/mdm-certs/<leg>` (not under the uploaded log dir) |
+| `RESTRICTION` | `disallowAddUser` | `disallowAddUser`, then `disallowFactoryReset` |
 | AVD name | `mdm36` | `avd-name: mdm36` on the emulator runner |
 
 `server/tests/test_policy_restriction.py` checks the dumpsys parser. It does not boot an emulator.
@@ -192,16 +193,16 @@ Two fixes came out of the bench. `adb logcat -s` keeps only the last level given
 
 Issue #47. The image is the same AOSP ATD Android 15 emulator (`system-images;android-35;aosp_atd;x86_64`). It is not GrapheneOS. Attestation is not asserted.
 
-[.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml), job `AOSP ATD emulator policy (disallowAddUser)`, runs on `ubuntu-latest`. There is no self-hosted runner. Steps:
+[.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml), job `AOSP ATD emulator policy (disallowAddUser, disallowFactoryReset)`, runs on `ubuntu-latest`. There is no self-hosted runner. Steps:
 
 1. Enable KVM with the udev rule `KERNEL=="kvm", GROUP="kvm", MODE="0666"` on the hosted runner.
 2. `actions/setup-java` (Temurin 17), `gradle/actions/setup-gradle` (Gradle 8.9), and `actions/setup-python` (3.12), each pinned by commit SHA, as are `actions/checkout` and `actions/upload-artifact`.
 3. Build the test-only debug APK before the emulator boots.
 4. `reactivecircus/android-emulator-runner` v2.38.0 (pinned by SHA) with `api-level: 35`, `target: aosp_atd`, `arch: x86_64`, `avd-name: mdm36` boots the emulator on `emulator-5554` and runs `scripts/ci-emulator-policy.sh`.
 5. If that step fails before the wrapper creates `/tmp/mdm-ci/script-started`, the same emulator step runs once more. See [Boot retry](#boot-retry).
-6. `actions/upload-artifact` uploads `/tmp/mdm-ci` as `emulator-policy-logs`, `if: always()`. The path excludes `!/tmp/mdm-ci/**/certs/**` and `*.pem` / `*.p12` / `*.key` / `*.crt`. Lab certs are not written under `/tmp/mdm-ci` at all.
+6. `actions/upload-artifact` uploads `/tmp/mdm-ci` as `emulator-policy-logs`, `if: always()`. The path excludes `!/tmp/mdm-ci/**/certs/**`, `fleet.sqlite*`, and `*.pem` / `*.p12` / `*.key` / `*.crt` / `*.der` / `*.cer` / `*.pfx` / `*.jks` / `*.keystore` / `*.csr` / `*.bks`. Lab certs are not written under `/tmp/mdm-ci` at all. The wrapper also deletes `fleet.sqlite*` before it exits, because the WAL can hold an attestation chain. Attestation is not asserted.
 
-`scripts/ci-emulator-policy.sh` runs four legs, each with its own `OUT`, and asserts every exit code:
+`scripts/ci-emulator-policy.sh` runs the disallowAddUser legs below, asserts that post-run state, then runs the Phase 6 disallowFactoryReset legs. Each leg has its own `OUT`. Every exit code is asserted:
 
 | Leg | `DISALLOW_ADD_USER` | Required exit | Required line |
 | --- | --- | --- | --- |
@@ -220,7 +221,7 @@ The emulator-runner step is attempted once. The wrapper touches `/tmp/mdm-ci/scr
 
 ### Certs stay out of the artifact
 
-`CERTS_DIR` on the runner is `/tmp/mdm-certs/<leg>`. That directory is not the upload path. The upload also drops `!/tmp/mdm-ci/**/certs/**` and certificate/key suffixes. The wrapper fails the job if a `*.pem`, `*.p12`, `*.key`, `*.crt`, or `certs/` directory is under `/tmp/mdm-ci`. The nimo default is still `$OUT/certs`.
+`CERTS_DIR` on the runner is `/tmp/mdm-certs/<leg>`. That directory is not the upload path. The upload also drops `!/tmp/mdm-ci/**/certs/**`, `fleet.sqlite*`, and certificate/key suffixes `.pem`, `.p12`, `.key`, `.crt`, `.der`, `.cer`, `.pfx`, `.jks`, `.keystore`, `.csr`, and `.bks`. The wrapper fails the job if a certificate or key file, or a `certs/` directory, is under `/tmp/mdm-ci`. After that check it deletes `fleet.sqlite*` and fails if any remain. The exit trap deletes them on an early exit too. The nimo default for certs is still `$OUT/certs`. The sqlite for a nimo run stays under `OUT`.
 
 Triggers: `pull_request` and `push` to `main`, filtered to the operate script, the CI wrapper, `server/**`, `app/**`, `protocol/**`, the Gradle files and the workflow file, plus `workflow_dispatch`. There is no cron. Concurrency cancels an older run on the same PR or ref. The job timeout is 45 minutes. `docs/**` is not in the filter, so a docs-only `push` to `main` does not run this job. On `pull_request` the filter matches the whole PR diff, so a docs-only head still re-runs the job while the PR also changes a listed path.
 
@@ -237,3 +238,64 @@ ASSERT OK: post-run device owner is net.themark.grapheneosmdm
 ASSERT OK: post-run no_add_user is applied
 ASSERT OK: no cert or key file under /tmp/mdm-ci
 ```
+
+## Phase 6 — disallowFactoryReset on the KVM job
+
+Issue #49. The image is the same AOSP ATD Android 15 emulator (`system-images;android-35;aosp_atd;x86_64`, `avd-name: mdm36`). It is not GrapheneOS. Attestation is not asserted. The script does not factory-reset the emulator and does not wipe it.
+
+`PolicyManager.userRestrictionUpdates` already maps `policyFlags.disallowFactoryReset` true to `DevicePolicyManager.addUserRestriction(UserManager.DISALLOW_FACTORY_RESET)` and false to `clearUserRestriction`. The platform constant is the dumpsys token `no_factory_reset`. `PolicyRestrictionTest.trueFlagsAddRestrictions` and `falseFlagsClearRestrictions` cover that mapping. The protocol schema already has the boolean. No app change.
+
+The operate script is the Phase 4 script with `RESTRICTION=disallowFactoryReset`. The mode env is `DISALLOW_FACTORY_RESET`. Default `RESTRICTION` remains `disallowAddUser`, so the Phase 4 command is unchanged.
+
+```bash
+RESTRICTION=disallowFactoryReset scripts/emulator-policy-disallow-add-user.sh
+RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=false scripts/emulator-policy-disallow-add-user.sh
+RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=absent scripts/emulator-policy-disallow-add-user.sh
+RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=true-then-false scripts/emulator-policy-disallow-add-user.sh
+```
+
+| `DISALLOW_FACTORY_RESET` | `policyFlags` | Expected script result |
+| --- | --- | --- |
+| `true` (default) | `{"disallowFactoryReset": true}` | Exit 0. `no_factory_reset` is applied. The PASS line names that flag and the device id. |
+| `false` | `{"disallowFactoryReset": false}` | Exit 1. `FAIL: restriction no_factory_reset not applied (DISALLOW_FACTORY_RESET=false)`. |
+| `absent` | `{}` | Exit 1. `FAIL: restriction no_factory_reset not applied (DISALLOW_FACTORY_RESET=absent)`. |
+| `true-then-false` | `{"disallowFactoryReset": true}`, then a per-device override `{"disallowFactoryReset": false}` | Exit 0 only when `no_factory_reset` is applied after the first check-in and, after the second, the device_policy dump has a DevicePolicyEngine, UserRestrictionPolicyKey, or Device Owner marker and `policy_restriction.py` exits 1 with `restriction no_factory_reset is not applied`. Empty or cut-off dumpsys fails. No owner reset in between. |
+
+`false` and `absent` are expected to FAIL. That is the negative proof. The desired command id is `emulator-phase6`. The clear override uses noop id `emulator-phase6-clear`. Setting the restriction does not factory-reset the device.
+
+The same workflow, job `AOSP ATD emulator policy (disallowAddUser, disallowFactoryReset)`, runs the four disallowAddUser legs, asserts device owner and `no_add_user`, then runs:
+
+| Leg | `RESTRICTION` | `DISALLOW_FACTORY_RESET` | Required exit | Required line |
+| --- | --- | --- | --- | --- |
+| factory-absent | `disallowFactoryReset` | `absent` | 1 | `FAIL: restriction no_factory_reset not applied (DISALLOW_FACTORY_RESET=absent)` |
+| factory-false | `disallowFactoryReset` | `false` | 1 | `FAIL: restriction no_factory_reset not applied (DISALLOW_FACTORY_RESET=false)` |
+| factory-true-then-false | `disallowFactoryReset` | `true-then-false` | 0 | `PASS: no_factory_reset applied via disallowFactoryReset=true, then cleared by disallowFactoryReset=false with no owner reset` |
+| factory-true | `disallowFactoryReset` | `true` | 0 | `PASS: no_factory_reset applied via policyFlags.disallowFactoryReset=true` |
+
+The add-user post-run check is before these legs, because removing the test-only owner drops `no_add_user`. After `factory-true` the job asserts device owner and `no_factory_reset` (`post-run-factory-reset`). Each leg's job summary has a `restriction:` line, the `policy_restriction.py` output, the `GET /api/devices` row, and the PASS or FAIL line.
+
+Path filters, the single boot retry, and `workflow_dispatch` are unchanged. There is no cron and no self-hosted runner.
+
+### CI result
+
+`ef5b380` (`ef5b38089fcab96c616547adc18f58b879e66e62`) is the code SHA. Green run on that SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/38287586817, job `AOSP ATD emulator policy (disallowAddUser, disallowFactoryReset)`. The boot retry step was skipped. The fingerprint was `Android/sdk_slim_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys`. The image is an AOSP ATD emulator, not GrapheneOS. Attestation was not asserted. `pull_request` path filters match the whole PR diff, so a docs-only head re-runs this job. That later run is not cited here.
+
+```
+ASSERT OK: leg absent DISALLOW_ADD_USER=absent exit=1 expected=1
+ASSERT OK: leg false DISALLOW_ADD_USER=false exit=1 expected=1
+ASSERT OK: leg true-then-false DISALLOW_ADD_USER=true-then-false exit=0 expected=0
+ASSERT OK: leg true DISALLOW_ADD_USER=true exit=0 expected=0
+ASSERT OK: post-run device owner is net.themark.grapheneosmdm
+ASSERT OK: post-run no_add_user is applied
+ASSERT OK: leg factory-absent DISALLOW_FACTORY_RESET=absent exit=1 expected=1
+ASSERT OK: leg factory-false DISALLOW_FACTORY_RESET=false exit=1 expected=1
+ASSERT OK: leg factory-true-then-false DISALLOW_FACTORY_RESET=true-then-false exit=0 expected=0
+ASSERT OK: leg factory-true DISALLOW_FACTORY_RESET=true exit=0 expected=0
+ASSERT OK: post-run-factory-reset device owner is net.themark.grapheneosmdm
+ASSERT OK: post-run-factory-reset no_factory_reset is applied
+ASSERT OK: no cert or key file under /tmp/mdm-ci
+ASSERT OK: no fleet.sqlite* under /tmp/mdm-ci
+RESULT: PASS (AOSP ATD emulator, not GrapheneOS; attestation not asserted)
+```
+
+Protocol schemas and Android unit tests on the same code SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/38287586836

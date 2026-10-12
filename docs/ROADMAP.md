@@ -55,11 +55,23 @@ Bench result (2026-10-09, nimo): `false` and `absent` FAIL at the restriction st
 
 [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml) boots the AOSP ATD Android 15 emulator (`api-level 35`, `aosp_atd`, `x86_64`) on a free `ubuntu-latest` runner with KVM enabled by a udev rule. No self-hosted runner. [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh) runs [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh) as `absent` and `false` (exit 1 asserted), `true-then-false` (true applies `no_add_user`, a second check-in with `false` and no owner reset clears it; exit 0) and `true` (exit 0), then asserts the post-run state: device owner and `no_add_user` applied. Logs upload as the `emulator-policy-logs` artifact. Triggers are path-filtered `pull_request` / `push` to `main`, plus `workflow_dispatch`. The image is not GrapheneOS. Attestation is not asserted. Procedure: [docs/EMULATOR.md](EMULATOR.md#phase-5--github-hosted-kvm-runner).
 
-`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last code SHA. The green emulator run on that SHA is https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590 (job `AOSP ATD emulator policy (disallowAddUser)`). Docs head `5a4e8f1` (`5a4e8f1a9f7417e208e579a079af4c893fa7ba59`) ran the same job at https://github.com/themark-net/grapheneos-mdm/actions/runs/37977122809. `pull_request` path filters match the whole PR diff, so a docs-only head still re-runs the job while the PR changes a listed path.
+`ef320ae` (`ef320ae6b973ca7bf03fbcd4dd94f2466c45669b`) is the last code SHA before Phase 6. The green emulator run on that SHA is https://github.com/themark-net/grapheneos-mdm/actions/runs/37976338590 (job `AOSP ATD emulator policy (disallowAddUser)`). Docs head `5a4e8f1` (`5a4e8f1a9f7417e208e579a079af4c893fa7ba59`) ran the same job at https://github.com/themark-net/grapheneos-mdm/actions/runs/37977122809. `pull_request` path filters match the whole PR diff, so a docs-only head still re-runs the job while the PR changes a listed path.
+
+### Phase 6 — disallowFactoryReset on the same KVM job
+
+**Done.** org-can-do. Issue #49, branch `build/p6-factory-reset`. Not Feature GO. Handoff: [docs/ops/HANDOFF-p6-factory-reset-2026-10-12.md](ops/HANDOFF-p6-factory-reset-2026-10-12.md).
+
+The same workflow as Phase 5, [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml), on `ubuntu-latest` with KVM. No self-hosted runner. [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh) keeps the disallowAddUser legs, asserts device owner and `no_add_user`, then runs `RESTRICTION=disallowFactoryReset` on [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). The dumpsys token is `no_factory_reset` (`UserManager.DISALLOW_FACTORY_RESET`). Absent and false FAIL at the restriction step (exit 1). `true-then-false` applies the restriction, then a second check-in with `false` and no owner reset clears it. Exit 0 only when the after-false `device_policy` dump is non-empty and contains `DevicePolicyEngine`, `UserRestrictionPolicyKey`, or a Device Owner line, and [server/policy_restriction.py](../server/policy_restriction.py) exits 1 and prints `restriction no_factory_reset is not applied`. Exit 2 (empty or unrecognised dumpsys) is a failed clear. `true` PASS (exit 0). The script does not factory-reset or wipe. The image is an AOSP ATD emulator. Attestation is not asserted.
+
+`PolicyManager.userRestrictionUpdates` already maps `disallowFactoryReset` true to `addUserRestriction` and false to `clearUserRestriction`. The desired-state schema already has the flag. No app change.
+
+The artifact excludes `fleet.sqlite*` (the WAL can hold an attestation chain) and certificate suffixes `.pem`, `.key`, `.p12`, `.crt`, `.der`, `.cer`, `.pfx`, `.jks`, `.keystore`, `.csr`, `.bks`. The clear leg requires that not-applied sentence and exit 1, not merely a non-zero exit.
+
+`ef5b380` (`ef5b38089fcab96c616547adc18f58b879e66e62`) is the code SHA. The green emulator run on that SHA is https://github.com/themark-net/grapheneos-mdm/actions/runs/38287586817 (job `AOSP ATD emulator policy (disallowAddUser, disallowFactoryReset)`). The boot retry was skipped. The image is an AOSP ATD emulator, not GrapheneOS. Attestation was not asserted. `pull_request` path filters match the whole PR diff, so a docs-only head still re-runs the job. That later URL is not recorded in a follow-up commit.
 
 ## Next slice
 
-Not chosen yet. Candidates that stay org-can-do: gate one more `policyFlags` restriction in the same CI job, or put the Phase 3 same-database script on the same runner (it records `chain_invalid`; that is a record, not attestation success). Pick one with the founder before starting.
+Not chosen yet. Parked org-can-do candidate: put the Phase 3 same-database script on this runner. It records `chain_invalid` on the AOSP ATD image. That is a record, not attestation success. Do not start it from this slice.
 
 ## Founder-needed
 
