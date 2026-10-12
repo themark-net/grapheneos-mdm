@@ -278,4 +278,24 @@ Path filters, the single boot retry, and `workflow_dispatch` are unchanged. Ther
 
 ### CI result
 
-The code-SHA run URL is added once that emulator job is green.
+`06e37d8` (`06e37d808f124623104368f0b6fb1d7e3de55bc3`) is the code SHA. Green run on that SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/38284918877, job `AOSP ATD emulator policy (disallowAddUser, disallowFactoryReset)`. The boot retry step was skipped. The fingerprint was `Android/sdk_slim_x86_64/emu64x:15/AE3A.240806.019/12368160:userdebug/test-keys`. The image is an AOSP ATD emulator, not GrapheneOS. Attestation was not asserted. `pull_request` path filters match the whole PR diff, so a docs-only head re-runs this job. That later run is not cited here.
+
+```
+ASSERT OK: leg absent DISALLOW_ADD_USER=absent exit=1 expected=1
+ASSERT OK: leg false DISALLOW_ADD_USER=false exit=1 expected=1
+ASSERT OK: leg true-then-false DISALLOW_ADD_USER=true-then-false exit=0 expected=0
+ASSERT OK: leg true DISALLOW_ADD_USER=true exit=0 expected=0
+ASSERT OK: post-run device owner is net.themark.grapheneosmdm
+ASSERT OK: post-run no_add_user is applied
+ASSERT OK: leg factory-absent DISALLOW_FACTORY_RESET=absent exit=1 expected=1
+ASSERT OK: leg factory-false DISALLOW_FACTORY_RESET=false exit=1 expected=1
+ASSERT OK: leg factory-true-then-false DISALLOW_FACTORY_RESET=true-then-false exit=0 expected=0
+ASSERT OK: leg factory-true DISALLOW_FACTORY_RESET=true exit=0 expected=0
+ASSERT OK: post-run-factory-reset device owner is net.themark.grapheneosmdm
+ASSERT OK: post-run-factory-reset no_factory_reset is applied
+ASSERT OK: no cert or key file under /tmp/mdm-ci
+ASSERT OK: no fleet.sqlite* under /tmp/mdm-ci
+RESULT: PASS (AOSP ATD emulator, not GrapheneOS; attestation not asserted)
+```
+
+Protocol schemas and Android unit tests on the same code SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/38284918875

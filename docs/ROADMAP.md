@@ -67,7 +67,7 @@ The same workflow as Phase 5, [.github/workflows/emulator-policy.yml](../.github
 
 The artifact excludes `fleet.sqlite*` (the WAL can hold an attestation chain) and certificate suffixes `.pem`, `.key`, `.p12`, `.crt`, `.der`, `.cer`, `.pfx`, `.jks`, `.keystore`, `.csr`. The clear leg requires that not-applied sentence, not merely a non-zero exit.
 
-The code-SHA run URL is added once that emulator job is green.
+`06e37d8` (`06e37d808f124623104368f0b6fb1d7e3de55bc3`) is the code SHA. The green emulator run on that SHA is https://github.com/themark-net/grapheneos-mdm/actions/runs/38284918877 (job `AOSP ATD emulator policy (disallowAddUser, disallowFactoryReset)`). The boot retry was skipped. The image is an AOSP ATD emulator, not GrapheneOS. Attestation was not asserted. `pull_request` path filters match the whole PR diff, so a docs-only head still re-runs the job. That later URL is not recorded in a follow-up commit.
 
 ## Next slice
 
