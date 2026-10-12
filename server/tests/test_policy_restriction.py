@@ -319,6 +319,32 @@ class PolicyRestrictionTest(unittest.TestCase):
 
     def test_empty_dumps_are_not_applied(self) -> None:
         proc = self._run("", "")
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertEqual(proc.stdout, "")
+        self.assertIn("dumpsys input is empty or unrecognised", proc.stderr)
+        self.assertNotIn("is not applied", proc.stderr)
+
+    def test_cutoff_dumpsys_without_a_marker_exits_2(self) -> None:
+        proc = self._run(
+            "DUMP OF SERVICE device_policy:\n",
+            "DUMP OF SERVICE user:\n",
+        )
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertEqual(proc.stdout, "")
+        self.assertIn("dumpsys input is empty or unrecognised", proc.stderr)
+        self.assertNotIn("is not applied", proc.stderr)
+
+    def test_whitespace_only_dumpsys_exits_2(self) -> None:
+        proc = self._run(" \n\t", "\n")
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertNotIn("is not applied", proc.stderr)
+
+    def test_cutoff_policy_with_user_header_is_still_exit_1(self) -> None:
+        # The parser can see a user header and correctly say the token is
+        # absent. The clear leg must still reject this: the device_policy
+        # file has no DevicePolicyEngine marker. See test_clear_leg_stub.
+        user = "Users:\n  UserInfo{0:Owner:c13} serialNo=0\n    Restrictions:\n      none\n"
+        proc = self._run("DUMP OF SERVICE device_policy:\n", user)
         self._assert_not_applied(proc)
 
 

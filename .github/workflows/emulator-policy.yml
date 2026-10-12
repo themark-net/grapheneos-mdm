@@ -148,9 +148,7 @@ jobs:
             !/tmp/mdm-ci/**/*.jks
             !/tmp/mdm-ci/**/*.keystore
             !/tmp/mdm-ci/**/*.csr
-            !/tmp/mdm-ci/**/fleet.sqlite
-            !/tmp/mdm-ci/**/fleet.sqlite-wal
-            !/tmp/mdm-ci/**/fleet.sqlite-shm
+            !/tmp/mdm-ci/**/*.bks
             !/tmp/mdm-ci/**/fleet.sqlite*
           if-no-files-found: warn
           retention-days: 14

@@ -14,10 +14,12 @@
 # absent sends {}. true-then-false applies true exactly like the true mode,
 # then, with no owner reset and no pm clear, sets a per-device override
 # {"<flag>": false} in the same sqlite, broadcasts a second check-in, and
-# requires the dumpsys token to be gone. Gone means policy_restriction.py
-# exits non-zero and prints "restriction <token> is not applied". Any other
-# non-zero exit is a failure. A bad RESTRICTION or mode exits before the
-# emulator is touched.
+# requires the dumpsys token to be gone. Gone means the after-false
+# device_policy dump is non-empty and contains DevicePolicyEngine,
+# UserRestrictionPolicyKey, or a Device Owner line, and policy_restriction.py
+# exits 1 and prints "restriction <token> is not applied". Exit 2 (empty or
+# unrecognised dumpsys) is a failed clear. A bad RESTRICTION or mode, or
+# both mode env vars set at once, exits before the emulator is touched.
 #
 # disallowFactoryReset only sets or clears the user restriction
 # no_factory_reset. This script does not factory-reset, wipe, or pass
@@ -53,9 +55,13 @@
 # - true-then-false: if the token is still applied after the false
 #   check-in, exit non-zero with
 #   FAIL: step clear: <token> still applied after <flag>=false.
-#   If policy_restriction.py exits non-zero but does not print
-#   "restriction <token> is not applied", exit non-zero. A read error is
-#   not a clear.
+#   The after-false device_policy dump must be non-empty and contain
+#   DevicePolicyEngine, UserRestrictionPolicyKey, or a Device Owner line.
+#   policy_restriction.py must exit 1 and print
+#   "restriction <token> is not applied". Exit 2 (empty or unrecognised
+#   dumpsys) is a failed clear. A read error is not a clear.
+# - Setting both DISALLOW_ADD_USER and DISALLOW_FACTORY_RESET is a fail
+#   before the emulator is used. Only the env var for RESTRICTION may be set.
 # - Post-run state: after a true run the emulator is left with this app as
 #   device owner and the selected token set. After true-then-false the app
 #   is still device owner and that token is cleared. The next run removes
@@ -147,6 +153,59 @@ case "$MODE" in
   true|false|absent|true-then-false) ;;
   *) fail "${MODE_ENV} must be true, false, absent, or true-then-false (got: ${MODE})" ;;
 esac
+
+if [ "$RESTRICTION" = "disallowAddUser" ] && [ -n "${DISALLOW_FACTORY_RESET+x}" ]; then
+  fail "DISALLOW_FACTORY_RESET must not be set when RESTRICTION=disallowAddUser (got: ${DISALLOW_FACTORY_RESET})"
+fi
+if [ "$RESTRICTION" = "disallowFactoryReset" ] && [ -n "${DISALLOW_ADD_USER+x}" ]; then
+  fail "DISALLOW_ADD_USER must not be set when RESTRICTION=disallowFactoryReset (got: ${DISALLOW_ADD_USER})"
+fi
+
+# Clear-leg gate. Exit via fail() unless the after-false capture is a real
+# dumpsys and policy_restriction.py exits 1 with the not-applied sentence.
+# CLEAR_LEG_STUB=1 runs only this gate, so a test can point DEVICE_POLICY_FILE
+# and USER_DUMP_FILE at a fake dumpsys. It does not boot an emulator.
+accept_cleared_restriction() {
+  local policy_file="$1" user_file="$2" out_file="$3"
+  local rc msg
+  if [ ! -s "$policy_file" ] || [ ! -s "$user_file" ]; then
+    fail "step clear: after-false dumpsys is empty"
+  fi
+  if ! grep -q -e 'DevicePolicyEngine' -e 'UserRestrictionPolicyKey' -e 'Device Owner' -e 'DeviceOwner' "$policy_file"; then
+    fail "step clear: after-false device_policy dump lacks DevicePolicyEngine, UserRestrictionPolicyKey, or Device Owner"
+  fi
+  set +e
+  python3 "$ROOT/server/policy_restriction.py" \
+    --restriction "$TOKEN" \
+    --device-policy "$policy_file" \
+    --user "$user_file" \
+    >"$out_file" 2>&1
+  rc=$?
+  set -e
+  cat "$out_file"
+  if [ "$rc" -eq 2 ]; then
+    fail "step clear: policy_restriction.py rejected empty or unrecognised dumpsys (exit=2)"
+  fi
+  if [ "$rc" -eq 0 ]; then
+    fail "step clear: ${TOKEN} still applied after ${FLAG_KEY}=false"
+  fi
+  if [ "$rc" -ne 1 ]; then
+    fail "step clear: policy_restriction.py exit=${rc}, expected 1"
+  fi
+  msg="restriction ${TOKEN} is not applied"
+  if ! grep -qF "$msg" "$out_file"; then
+    fail "step clear: policy_restriction.py did not report '${msg}' (exit=${rc})"
+  fi
+}
+
+if [ "${CLEAR_LEG_STUB:-}" = "1" ]; then
+  [ -n "${DEVICE_POLICY_FILE:-}" ] || fail "CLEAR_LEG_STUB requires DEVICE_POLICY_FILE"
+  [ -n "${USER_DUMP_FILE:-}" ] || fail "CLEAR_LEG_STUB requires USER_DUMP_FILE"
+  mkdir -p "${OUT:-/tmp}"
+  accept_cleared_restriction "$DEVICE_POLICY_FILE" "$USER_DUMP_FILE" "${OUT:-/tmp}/restriction-after-false.txt"
+  echo "PASS: clear leg accepted ${TOKEN}"
+  exit 0
+fi
 
 [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME" ] || fail "ANDROID_HOME is not a directory"
 [ -x "$JAVA_HOME/bin/java" ] || fail "JAVA_HOME has no java: $JAVA_HOME"
@@ -683,22 +742,10 @@ JSON
     || fail "step clear: dumpsys device_policy failed"
   adb -s "$SERIAL" shell dumpsys user >"$OUT/dumpsys_user-after-false.txt" \
     || fail "step clear: dumpsys user failed"
-  set +e
-  python3 "$ROOT/server/policy_restriction.py" \
-    --restriction "$TOKEN" \
-    --device-policy "$OUT/device_policy-after-false.txt" \
-    --user "$OUT/dumpsys_user-after-false.txt" \
-    >"$OUT/restriction-after-false.txt" 2>&1
-  CLEAR_RC=$?
-  set -e
-  cat "$OUT/restriction-after-false.txt"
-  NOT_APPLIED="restriction ${TOKEN} is not applied"
-  if [ "$CLEAR_RC" -eq 0 ]; then
-    fail "step clear: ${TOKEN} still applied after ${FLAG_KEY}=false"
-  fi
-  if ! grep -qF "$NOT_APPLIED" "$OUT/restriction-after-false.txt"; then
-    fail "step clear: policy_restriction.py did not report '${NOT_APPLIED}' (exit=${CLEAR_RC})"
-  fi
+  accept_cleared_restriction \
+    "$OUT/device_policy-after-false.txt" \
+    "$OUT/dumpsys_user-after-false.txt" \
+    "$OUT/restriction-after-false.txt"
   OWNERS="$(adb -s "$SERIAL" shell dpm list-owners 2>&1 | tr -d '\r')"
   echo "$OWNERS" | grep -q "$PKG" || fail "step clear: $PKG is not device owner after the false check-in"
   echo "PASS: ${TOKEN} applied via ${FLAG_KEY}=true, then cleared by ${FLAG_KEY}=false with no owner reset; deviceId=${DEVICE_ID}. AOSP ATD emulator, not GrapheneOS; attestation not asserted."

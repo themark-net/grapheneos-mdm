@@ -16,9 +16,11 @@
 # disallowFactoryReset (token no_factory_reset), then its post-run state:
 #   factory-absent           -> must exit 1
 #   factory-false            -> must exit 1
-#   factory-true-then-false  -> must exit 0 (clears only when
-#                               policy_restriction.py prints
-#                               "restriction no_factory_reset is not applied")
+#   factory-true-then-false  -> must exit 0 (clears only when the
+#                               after-false device_policy dump has a
+#                               DevicePolicyEngine / UserRestrictionPolicyKey
+#                               / Device Owner marker and policy_restriction.py
+#                               exits 1 with "restriction no_factory_reset is not applied")
 #   factory-true             -> must exit 0
 #   post-run-factory-reset   -> device owner and no_factory_reset applied
 #
@@ -264,7 +266,7 @@ echo "== cert material must not sit under the uploaded log dir =="
 CERT_HITS="$(find "$LOGDIR" -type f \( \
   -name '*.pem' -o -name '*.p12' -o -name '*.key' -o -name '*.crt' \
   -o -name '*.der' -o -name '*.cer' -o -name '*.pfx' \
-  -o -name '*.jks' -o -name '*.keystore' -o -name '*.csr' \
+  -o -name '*.jks' -o -name '*.keystore' -o -name '*.csr' -o -name '*.bks' \
 \) -print || true)"
 CERT_DIRS="$(find "$LOGDIR" -type d -name certs -print || true)"
 if [ -n "$CERT_HITS" ] || [ -n "$CERT_DIRS" ]; then
