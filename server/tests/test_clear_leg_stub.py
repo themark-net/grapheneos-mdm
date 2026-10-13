@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "emulator-policy-restriction.sh"
 LIB = ROOT / "scripts" / "lib" / "clear-leg.sh"
 
-# Recognised user header, but the device_policy file stops before the engine.
+# Recognised user header, but the device_policy file has no section line.
 _CUTOFF_POLICY = "DUMP OF SERVICE device_policy:\n"
 _CUTOFF_USER = """\
 Users:
@@ -30,20 +30,31 @@ Users:
       no_config_wifi
 """
 
-# A real clear: the engine section is present and the token is false.
-_CLEARED_POLICY = """\
-DevicePolicyEngine:
-  Global Policies:
-    UserRestrictionPolicyKey userRestriction_no_factory_reset
-      Resolved Policy (MostRestrictive):
-        BooleanPolicyValue { mValue= false }
-"""
+# Run 38441669873 false/device_policy.txt. Anchored Local Policies and
+# Global Policies lines. no_factory_reset is absent, so the clear is real.
+_CLEARED_POLICY = (
+    ROOT / "server" / "tests" / "fixtures" / "api35-atd-false-device_policy.txt"
+).read_text(encoding="utf-8")
 _CLEARED_USER = """\
 Users:
   UserInfo{0:Owner:c13} serialNo=0 isPrimary=true
     Effective restrictions:
       no_config_wifi
 """
+_SECTION_MISS = (
+    "FAIL: step clear: after-false device_policy dump lacks a "
+    "Local Policies or Global Policies section"
+)
+
+
+def _section_mention_only(text: str) -> str:
+    lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        if line.strip() in {"Local Policies:", "Global Policies:"}:
+            lines.append("note: see Local Policies: and Global Policies: below\n")
+        else:
+            lines.append(line)
+    return "".join(lines)
 
 
 class ClearLegStubTest(unittest.TestCase):
@@ -93,10 +104,19 @@ class ClearLegStubTest(unittest.TestCase):
     def test_cutoff_dumpsys_fails_the_clear_leg(self) -> None:
         proc = self._run(_CUTOFF_POLICY, _CUTOFF_USER)
         self.assertEqual(proc.returncode, 1, proc.stderr)
-        self.assertIn(
-            "FAIL: step clear: after-false device_policy dump lacks a DevicePolicyEngine section",
-            proc.stderr,
-        )
+        self.assertIn(_SECTION_MISS, proc.stderr)
+        self.assertNotIn("PASS:", proc.stdout)
+        self.assertNotIn("PASS:", proc.stderr)
+
+    def test_anchored_section_rejects_a_midline_mention(self) -> None:
+        # The rest of the real false dump is a clear. A substring grep for
+        # the header names would accept the note line and this test goes red.
+        mention = _section_mention_only(_CLEARED_POLICY)
+        self.assertIn("Local Policies:", mention)
+        self.assertIn("Global Policies:", mention)
+        proc = self._run(mention, _CLEARED_USER)
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn(_SECTION_MISS, proc.stderr)
         self.assertNotIn("PASS:", proc.stdout)
         self.assertNotIn("PASS:", proc.stderr)
 
@@ -151,10 +171,7 @@ class ClearLegStubTest(unittest.TestCase):
         self.assertIn("PASS: clear leg accepted no_factory_reset", legacy.stdout)
         strict = self._run(policy, _CLEARED_USER, {"API_LEVEL": "35"})
         self.assertEqual(strict.returncode, 1, strict.stderr)
-        self.assertIn(
-            "FAIL: step clear: after-false device_policy dump lacks a DevicePolicyEngine section",
-            strict.stderr,
-        )
+        self.assertIn(_SECTION_MISS, strict.stderr)
         self.assertNotIn("PASS:", strict.stdout)
 
     def test_restriction_step_names_a_dump_timeout(self) -> None:

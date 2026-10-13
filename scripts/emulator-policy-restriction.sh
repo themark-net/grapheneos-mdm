@@ -15,8 +15,9 @@
 # then, with no owner reset and no pm clear, sets a per-device override
 # {"<flag>": false} in the same sqlite, broadcasts a second check-in, and
 # requires the dumpsys token to be gone. On API 34 and above, gone means the
-# after-false device_policy dump has a DevicePolicyEngine section, dumpsys
-# user has UserInfo{ and a restriction header, neither dump contains
+# after-false device_policy dump has an anchored Local Policies: or Global
+# Policies: line, dumpsys user has UserInfo{ and a restriction header,
+# neither dump contains
 # '*** SERVICE ... DUMP TIMEOUT', and policy_restriction.py exits 1 and
 # prints "restriction <token> is not applied". Exit 2 (empty, unrecognised,
 # timeout, or a missing API 34 marker) is a failed clear. Exit 3 (argparse
@@ -59,9 +60,10 @@
 # - true-then-false: if the token is still applied after the false
 #   check-in, exit non-zero with
 #   FAIL: step clear: <token> still applied after <flag>=false.
-#   On API 34 and above the after-false device_policy dump must contain a
-#   DevicePolicyEngine section, and dumpsys user must contain UserInfo{ and
-#   a restriction header. A '*** SERVICE ... DUMP TIMEOUT' line fails the
+#   On API 34 and above the after-false device_policy dump must contain an
+#   anchored Local Policies: or Global Policies: line, and dumpsys user
+#   must contain UserInfo{ and a restriction header. A
+#   '*** SERVICE ... DUMP TIMEOUT' line fails the
 #   step and names that marker. policy_restriction.py must exit 1 and print
 #   "restriction <token> is not applied". Exit 2 (empty, unrecognised,
 #   timeout, or a missing marker) is a failed clear. Exit 3 is a usage

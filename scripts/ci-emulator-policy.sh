@@ -16,11 +16,12 @@
 # disallowFactoryReset (token no_factory_reset), then its post-run state:
 #   factory-absent           -> must exit 1
 #   factory-false            -> must exit 1
-#   factory-true-then-false  -> must exit 0 (clears only when API 34+ sees a
-#                               DevicePolicyEngine section, UserInfo{, and a
-#                               restriction header, no DUMP TIMEOUT line, and
-#                               policy_restriction.py exits 1 with
-#                               "restriction no_factory_reset is not applied")
+#   factory-true-then-false  -> must exit 0 (clears only when API 34+ sees an
+#                               anchored Local Policies: or Global Policies:
+#                               line, UserInfo{, and a restriction header, no
+#                               DUMP TIMEOUT line, and policy_restriction.py
+#                               exits 1 with "restriction no_factory_reset is
+#                               not applied")
 #   factory-true             -> must exit 0
 #   post-run-factory-reset   -> device owner and no_factory_reset applied
 #
@@ -50,7 +51,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SCRIPT="$ROOT/scripts/emulator-policy-restriction.sh"
+SCRIPT="${OPERATE_SCRIPT:-$ROOT/scripts/emulator-policy-restriction.sh}"
 # shellcheck source=scripts/lib/cert-guard.sh
 source "$ROOT/scripts/lib/cert-guard.sh"
 LOGDIR="${LOGDIR:-/tmp/mdm-ci}"
@@ -245,14 +246,23 @@ assert_post_run() {
       return 0
       ;;
   esac
-  local rc
+  local rc errexit=0
+  # The wrapper starts with errexit off so an expected leg failure is
+  # asserted instead of aborting the script. set -e here would leave it
+  # on and a later factory-absent exit would skip the remaining legs,
+  # the cert guard, and RESULT.
+  case $- in
+    *e*) errexit=1 ;;
+  esac
   set +e
   python3 "$ROOT/server/policy_restriction.py" --restriction "$token" \
     --api-level "$api" \
     --device-policy "$post/dumpsys_device_policy.txt" \
     --user "$post/dumpsys_user.txt" >"$post/restriction.txt" 2>&1
   rc=$?
-  set -e
+  if [ "$errexit" -eq 1 ]; then
+    set -e
+  fi
   cat "$post/restriction.txt"
   if [ "$rc" -eq 0 ]; then
     note "ASSERT OK: ${tag} ${token} is applied"

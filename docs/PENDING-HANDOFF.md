@@ -2,14 +2,14 @@
 
 Continuation note for the next harness. Read [docs/ROADMAP.md](ROADMAP.md) for the next slice. Issue **#8** stays closed. Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner. That gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
 
-Updated 2026-10-13 on `build/p7-ci-hardening` (Phase 7, issue #51). `main` is at `0c54704` (`0c54704e5a4218cbf09d752599edb3b0e19e1f5e`, Phase 6, PR #50). This file describes the Phase 7 branch. It is not merged. No pull request was opened.
+Updated 2026-10-13 on `build/p7-ci-hardening` (Phase 7, issue #51). `main` is at `0c54704` (`0c54704e5a4218cbf09d752599edb3b0e19e1f5e`, Phase 6, PR #50). This file describes the Phase 7 branch. It is not merged. Pull request #52 is open (https://github.com/themark-net/grapheneos-mdm/pull/52).
 
 ## 1. Tip
 
 | | |
 | --- | --- |
 | Branch before this change | `main` at `0c54704` (Phase 6, PR #50) |
-| This change | Phase 7: CI hardening of the emulator-policy job (issue #51). Not merged. No pull request. |
+| This change | Phase 7: CI hardening of the emulator-policy job (issue #51). Not merged. Pull request #52 is open. |
 | Earlier tips | `e43fc37` Phase 5 (PR #48), `4784a79` Phase 3 (#44), `ed62c4a` docs handoff (#43) |
 | Ancestor feature | `b5fd229` (`b5fd229f86326b7c428365c8f49b6fb218a6d002`), Android emulator device-owner (#38) |
 
@@ -99,13 +99,13 @@ The same [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-p
 
 ### CI hardening — Phase 7
 
-Issue #51. Branch `build/p7-ci-hardening`, based on `main` at `0c54704`. Handoff: [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md). Decisions: [docs/ops/AUTONOMOUS-DECISIONS-2026-10-13.md](ops/AUTONOMOUS-DECISIONS-2026-10-13.md). Not Feature GO. Not merged. No pull request.
+Issue #51. Branch `build/p7-ci-hardening`, based on `main` at `0c54704`. Handoff: [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md). Decisions: [docs/ops/AUTONOMOUS-DECISIONS-2026-10-13.md](ops/AUTONOMOUS-DECISIONS-2026-10-13.md). Not Feature GO. Not merged. Pull request #52 is open (https://github.com/themark-net/grapheneos-mdm/pull/52).
 
-The operate script is [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). On API 34 and above, the restriction step and the clear leg require a `DevicePolicyEngine` section, `UserInfo{`, and a restriction header, and they fail on `*** SERVICE ... DUMP TIMEOUT`. [server/policy_restriction.py](../server/policy_restriction.py) exits 3 on an argparse usage error and 2 on empty, unrecognised, timeout, or a missing API 34 marker. `CLEAR_LEG_STUB` lives in [scripts/lib/clear-leg.sh](../scripts/lib/clear-leg.sh) and refuses a caller-supplied `SERIAL` or `ANDROID_SERIAL`. The BouncyCastle exclusion is the line `!/tmp/mdm-ci/**/*.bks` in [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml), and `-name '*.bks'` in [scripts/lib/cert-guard.sh](../scripts/lib/cert-guard.sh). JavaScript actions are pinned to Node 24 releases. `PolicyRestrictionTest` compares pairs as a map. ASSERT lines are printed once.
+The operate script is [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). On API 34 and above, the restriction step and the clear leg require an anchored `Local Policies:` or `Global Policies:` line (a mid-line mention does not count; API 35 ATD dumps have no `DevicePolicyEngine` line), `UserInfo{`, and a restriction header, and they fail on `*** SERVICE ... DUMP TIMEOUT`. [server/policy_restriction.py](../server/policy_restriction.py) exits 3 on an argparse usage error and 2 on empty, unrecognised, timeout, or a missing API 34 marker. `CLEAR_LEG_STUB` lives in [scripts/lib/clear-leg.sh](../scripts/lib/clear-leg.sh) and refuses a caller-supplied `SERIAL` or `ANDROID_SERIAL`. The BouncyCastle exclusion is the line `!/tmp/mdm-ci/**/*.bks` in [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml), and `-name '*.bks'` in [scripts/lib/cert-guard.sh](../scripts/lib/cert-guard.sh). JavaScript actions are pinned to Node 24 releases. `PolicyRestrictionTest` compares pairs as a map. ASSERT lines are printed once.
 
-Cursor Approval is not green. PR #50 head `c9e646b` concluded `neutral` (`Approval Agent run encountered an error`, run `bc-9a8d6e3e`). Main `0c54704` has no Cursor Approval check. This branch did not open a pull request, so the check has not run on the Phase 7 head. The waiver on issue #51 stays open.
+Cursor Approval is not green. PR #50 head `c9e646b` concluded `neutral` (`Approval Agent run encountered an error`, run `bc-9a8d6e3e`). Main `0c54704` has no Cursor Approval check. Pull request #52 is open. On `e852c6f` the Cursor Approval check concluded `neutral`. The waiver on issue #51 stays open. This commit does not close it.
 
-The emulator-policy job has not run on this head. A push of `build/p7-ci-hardening` does not match `pull_request`, `push` to `main`, or `workflow_dispatch`. The path filters include the renamed script and `scripts/lib/**`. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
+emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. The repair on this branch has not had a green emulator-policy run. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
 
 ### Earlier squash merges
 

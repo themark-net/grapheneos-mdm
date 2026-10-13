@@ -9,6 +9,10 @@ ASSERT line. No emulator.
 
 from __future__ import annotations
 
+import os
+import stat
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -82,6 +86,132 @@ class CiWorkflowTest(unittest.TestCase):
         self.assertNotIn('cat "$SUMMARY"', wrapper)
         self.assertIn('note "ASSERT OK:', wrapper)
         self.assertIn('echo "summary file: $SUMMARY"', wrapper)
+
+    def test_wrapper_runs_every_leg_when_a_negative_leg_exits_1(self) -> None:
+        # assert_post_run used to finish with set -e. The wrapper starts
+        # with errexit off. Leaving it on aborts at factory-absent (exit 1)
+        # inside `bash | tee`, so the later legs, the cert guard, and RESULT
+        # never run. This stub has no emulator. LOGDIR is not /tmp/mdm-ci.
+        policy = ROOT / "server" / "tests" / "fixtures" / "api35-atd-true-device_policy.txt"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            logdir = root / "logs"
+            certs = root / "certs"
+            bindir = root / "bin"
+            logdir.mkdir()
+            bindir.mkdir()
+            user = root / "dumpsys_user.txt"
+            user.write_text(
+                "Users:\n"
+                "  UserInfo{0:Owner:c13} serialNo=0 isPrimary=true\n"
+                "    Effective restrictions:\n"
+                "      no_add_user\n"
+                "      no_factory_reset\n"
+                "    Device policy global restrictions:\n"
+                "      no_add_user\n"
+                "      no_factory_reset\n",
+                encoding="utf-8",
+            )
+            adb = bindir / "adb"
+            adb.write_text(
+                "#!/bin/bash\n"
+                "set -u\n"
+                'if [ "${1:-}" = "-s" ]; then shift 2; fi\n'
+                'cmd="${1:-}"; shift || true\n'
+                'case "$cmd" in\n'
+                "  logcat) exit 0 ;;\n"
+                "  shell) ;;\n"
+                "  *) exit 0 ;;\n"
+                "esac\n"
+                'sub="${1:-}"; shift || true\n'
+                'case "$sub" in\n'
+                "  dumpsys)\n"
+                '    if [ "${1:-}" = "device_policy" ]; then cat "$FIXTURE_POLICY"; else cat "$FIXTURE_USER"; fi\n'
+                "    ;;\n"
+                "  dpm) printf '%s\\n' 'Device owner: net.themark.grapheneosmdm' ;;\n"
+                "  getprop)\n"
+                '    if [ "${1:-}" = "ro.build.version.sdk" ]; then printf \'%s\\n\' 35; else printf \'%s\\n\' generic; fi\n'
+                "    ;;\n"
+                "esac\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            stub = root / "operate.sh"
+            stub.write_text(
+                "#!/bin/bash\n"
+                'name="$(basename "$OUT")"\n'
+                'case "$name" in\n'
+                "  absent)\n"
+                "    printf '%s\\n' 'FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=absent)'\n"
+                "    exit 1 ;;\n"
+                "  false)\n"
+                "    printf '%s\\n' 'FAIL: restriction no_add_user not applied (DISALLOW_ADD_USER=false)'\n"
+                "    exit 1 ;;\n"
+                "  true-then-false)\n"
+                "    printf '%s\\n' 'PASS: no_add_user applied via disallowAddUser=true, then cleared by disallowAddUser=false with no owner reset'\n"
+                "    exit 0 ;;\n"
+                "  true)\n"
+                "    printf '%s\\n' 'PASS: no_add_user applied via policyFlags.disallowAddUser=true'\n"
+                "    exit 0 ;;\n"
+                "  factory-absent)\n"
+                "    printf '%s\\n' 'FAIL: restriction no_factory_reset not applied (DISALLOW_FACTORY_RESET=absent)'\n"
+                "    exit 1 ;;\n"
+                "  factory-false)\n"
+                "    printf '%s\\n' 'FAIL: restriction no_factory_reset not applied (DISALLOW_FACTORY_RESET=false)'\n"
+                "    exit 1 ;;\n"
+                "  factory-true-then-false)\n"
+                "    printf '%s\\n' 'PASS: no_factory_reset applied via disallowFactoryReset=true, then cleared by disallowFactoryReset=false with no owner reset'\n"
+                "    exit 0 ;;\n"
+                "  factory-true)\n"
+                "    printf '%s\\n' 'PASS: no_factory_reset applied via policyFlags.disallowFactoryReset=true'\n"
+                "    exit 0 ;;\n"
+                "  *)\n"
+                "    printf '%s\\n' \"FAIL: unexpected leg $name\"\n"
+                "    exit 99 ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            adb.chmod(adb.stat().st_mode | stat.S_IEXEC)
+            stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+            env = os.environ.copy()
+            env.pop("GITHUB_STEP_SUMMARY", None)
+            env.update(
+                {
+                    "PATH": str(bindir) + os.pathsep + env.get("PATH", ""),
+                    "LOGDIR": str(logdir),
+                    "CERTS_ROOT": str(certs),
+                    "OPERATE_SCRIPT": str(stub),
+                    "FIXTURE_POLICY": str(policy),
+                    "FIXTURE_USER": str(user),
+                    "SERIAL": "emulator-5554",
+                }
+            )
+            proc = subprocess.run(
+                ["bash", str(ROOT / "scripts" / "ci-emulator-policy.sh")],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        out = proc.stdout
+        self.assertEqual(proc.returncode, 0, out + proc.stderr)
+        for needle in (
+            "::group::leg absent",
+            "::group::leg false",
+            "::group::leg true-then-false",
+            "::group::leg true",
+            "== post-run state (post-run, no_add_user) ==",
+            "::group::leg factory-absent",
+            "::group::leg factory-false",
+            "::group::leg factory-true-then-false",
+            "::group::leg factory-true",
+            "== post-run state (post-run-factory-reset, no_factory_reset) ==",
+            "ASSERT OK: no cert or key file under",
+            "ASSERT OK: no fleet.sqlite* under",
+            "RESULT: PASS (AOSP ATD emulator, not GrapheneOS; attestation not asserted)",
+        ):
+            self.assertIn(needle, out, needle)
+        self.assertNotIn("RESULT: FAIL", out)
 
 
 if __name__ == "__main__":

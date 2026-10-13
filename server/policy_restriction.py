@@ -5,8 +5,9 @@ Reads `dumpsys device_policy` and `dumpsys user`. Exits 0 and prints the
 matching lines when the restriction is applied. Exits 1 when a recognised
 dumpsys does not show it applied. Exits 2 when the input is empty,
 unrecognised, contains `*** SERVICE ... DUMP TIMEOUT`, or, when
-`--api-level` is 34 or higher, lacks a DevicePolicyEngine section,
-`UserInfo{`, or a restriction header. Exits 3 on an argparse usage error.
+`--api-level` is 34 or higher, lacks an anchored `Local Policies:` or
+`Global Policies:` line, `UserInfo{`, or a restriction header. Exits 3
+on an argparse usage error.
 Exit 2 and exit 3 are not a clear.
 
 A match is a whole restriction token. `no_add_user` does not match
@@ -19,8 +20,11 @@ plus exit 1 is the clear-leg proof. Empty text, or text with no dumpsys
 marker, prints `dumpsys input is empty or unrecognised` and exits 2.
 A usage error (missing or unknown argument) exits 3 and does not print
 that sentence. `--api-level` 34 or higher also exits 2, naming the missing
-marker, unless device_policy has a DevicePolicyEngine section and the user
-dump has `UserInfo{` plus one of the restriction headers above.
+marker, unless device_policy has an anchored `Local Policies:` or
+`Global Policies:` line and the user dump has `UserInfo{` plus one of
+the restriction headers above. A mid-line mention of those headers does
+not count. API 35 ATD `dumpsys device_policy` has no DevicePolicyEngine
+line.
 
 dumpsys user evidence is a line inside one of these blocks:
 
@@ -30,7 +34,7 @@ dumpsys user evidence is a line inside one of these blocks:
   Device policy restrictions:
 
 The last header is what Android 15 prints per user. dumpsys device_policy
-evidence is a DevicePolicyEngine `UserRestrictionPolicyKey` whose resolved
+evidence is a `UserRestrictionPolicyKey` whose resolved
 value is true, or a bundle / assignment such as `no_add_user=true`.
 Either file is enough.
 
@@ -115,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
 # is enough for the user dump; the clear leg also requires a device_policy
 # marker before it will treat exit 1 as a clear.
 _DUMP_MARKERS = (
+    "Local Policies:",
+    "Global Policies:",
     "DevicePolicyEngine",
     "UserRestrictionPolicyKey",
     "Device Owner",
@@ -129,7 +135,11 @@ _DUMP_MARKERS = (
 
 
 _TIMEOUT = re.compile(r"\*\*\* SERVICE .*DUMP TIMEOUT")
-_ENGINE_SECTION = re.compile(r"(?m)^[ \t]*DevicePolicyEngine([^A-Za-z0-9_]|$)")
+# API 35 ATD prints these as their own lines ("  Local Policies: ").
+# A mention later on the line is not a section.
+_ENGINE_SECTION = re.compile(
+    r"(?m)^[ \t]*(?:Local Policies:|Global Policies:)[ \t]*$"
+)
 _RESTRICTION_HEADER = re.compile(
     r"(?m)^[ \t]*(?:Effective restrictions:|Device policy global restrictions:"
     r"|Device policy local restrictions:|Device policy restrictions:)"
@@ -152,7 +162,7 @@ def dumpsys_input_problem(
     if api_level is not None and api_level >= 34:
         missing: list[str] = []
         if _ENGINE_SECTION.search(device_policy) is None:
-            missing.append("DevicePolicyEngine section")
+            missing.append("Local Policies or Global Policies section")
         if "UserInfo{" not in user_dump:
             missing.append("UserInfo{")
         if _RESTRICTION_HEADER.search(user_dump) is None:

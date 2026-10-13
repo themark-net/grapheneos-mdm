@@ -119,7 +119,7 @@ The log order is enroll, check-in, restriction, operator list. Guest temp files 
 
 If the restriction is missing, the script exits non-zero and names that step. Read `PolicyManager` logcat for the policyFlags parse. If `UI_PORT` (default 8787) is busy, or the UI is bound to `0.0.0.0`, `*`, or `::`, the script exits and does not bind off 127.0.0.1. If the emulator or KVM is unavailable, that is a host blocker. Do not fake a PASS.
 
-`true-then-false` runs the `true` steps through the operator list, then writes `desired-false.json` (`{"disallowAddUser": false}`, noop id `emulator-phase5-clear`), stores it as a per-device override with `server/fleet_store.py --db … set-desired <deviceId>`, and broadcasts a second check-in. It does not remove the owner and does not `pm clear` in between. It waits for two `lab-checkin outcome=SUCCESS` lines, two `check-in deviceId=` lines and two `Desired state policy flags applied` lines, saves `device_policy-after-false.txt` and `dumpsys_user-after-false.txt`, and, on API 34 and above, requires a `DevicePolicyEngine` section in the after-false `device_policy` dump, `UserInfo{` and a restriction header in `dumpsys user`, and no `*** SERVICE ... DUMP TIMEOUT` line. `policy_restriction.py` must exit 1 and print `restriction no_add_user is not applied`. Exit 0 is `FAIL: step clear: no_add_user still applied after disallowAddUser=false`. Exit 2 (empty, unrecognised, timeout, or a missing API 34 marker) is a failed clear. Exit 3 is an argparse usage error and is also a failed clear. Any other exit, or exit 1 without that sentence, is a failed clear. The agent maps `false` to `DevicePolicyManager.clearUserRestriction` (`PolicyManager.applyDesiredState`, covered by `PolicyRestrictionTest.falseFlagsClearRestrictions`).
+`true-then-false` runs the `true` steps through the operator list, then writes `desired-false.json` (`{"disallowAddUser": false}`, noop id `emulator-phase5-clear`), stores it as a per-device override with `server/fleet_store.py --db … set-desired <deviceId>`, and broadcasts a second check-in. It does not remove the owner and does not `pm clear` in between. It waits for two `lab-checkin outcome=SUCCESS` lines, two `check-in deviceId=` lines and two `Desired state policy flags applied` lines, saves `device_policy-after-false.txt` and `dumpsys_user-after-false.txt`, and, on API 34 and above, requires an anchored `Local Policies:` or `Global Policies:` line in the after-false `device_policy` dump (a mid-line mention does not count), `UserInfo{` and a restriction header in `dumpsys user`, and no `*** SERVICE ... DUMP TIMEOUT` line. `policy_restriction.py` must exit 1 and print `restriction no_add_user is not applied`. Exit 0 is `FAIL: step clear: no_add_user still applied after disallowAddUser=false`. Exit 2 (empty, unrecognised, timeout, or a missing API 34 marker) is a failed clear. Exit 3 is an argparse usage error and is also a failed clear. Any other exit, or exit 1 without that sentence, is a failed clear. The agent maps `false` to `DevicePolicyManager.clearUserRestriction` (`PolicyManager.applyDesiredState`, covered by `PolicyRestrictionTest.falseFlagsClearRestrictions`).
 
 ### Post-run emulator state
 
@@ -259,7 +259,7 @@ RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=true-then-false scripts/
 | `true` (default) | `{"disallowFactoryReset": true}` | Exit 0. `no_factory_reset` is applied. The PASS line names that flag and the device id. |
 | `false` | `{"disallowFactoryReset": false}` | Exit 1. `FAIL: restriction no_factory_reset not applied (DISALLOW_FACTORY_RESET=false)`. |
 | `absent` | `{}` | Exit 1. `FAIL: restriction no_factory_reset not applied (DISALLOW_FACTORY_RESET=absent)`. |
-| `true-then-false` | `{"disallowFactoryReset": true}`, then a per-device override `{"disallowFactoryReset": false}` | Exit 0 only when `no_factory_reset` is applied after the first check-in and, after the second, API 34+ sees a DevicePolicyEngine section, `UserInfo{`, and a restriction header, with no DUMP TIMEOUT line, and `policy_restriction.py` exits 1 with `restriction no_factory_reset is not applied`. Empty, cut-off, or timed-out dumpsys fails. No owner reset in between. |
+| `true-then-false` | `{"disallowFactoryReset": true}`, then a per-device override `{"disallowFactoryReset": false}` | Exit 0 only when `no_factory_reset` is applied after the first check-in and, after the second, API 34+ sees an anchored `Local Policies:` or `Global Policies:` line, `UserInfo{`, and a restriction header, with no DUMP TIMEOUT line, and `policy_restriction.py` exits 1 with `restriction no_factory_reset is not applied`. A mid-line mention of those headers does not count. Empty, cut-off, or timed-out dumpsys fails. No owner reset in between. |
 
 `false` and `absent` are expected to FAIL. That is the negative proof. The desired command id is `emulator-phase6`. The clear override uses noop id `emulator-phase6-clear`. Setting the restriction does not factory-reset the device.
 
@@ -306,7 +306,7 @@ Issue #51. Branch `build/p7-ci-hardening`, based on `main` at `0c54704`. Not Fea
 
 On API 34 and above the restriction step and the clear leg both require:
 
-- a `DevicePolicyEngine` section line in `dumpsys device_policy`
+- an anchored `Local Policies:` or `Global Policies:` line in `dumpsys device_policy` (a mid-line mention does not count; API 35 ATD dumps have no `DevicePolicyEngine` line)
 - `UserInfo{` in `dumpsys user`
 - one restriction header: `Effective restrictions:`, `Device policy global restrictions:`, `Device policy local restrictions:`, or `Device policy restrictions:`
 - no line matching `*** SERVICE ... DUMP TIMEOUT`
@@ -335,7 +335,7 @@ Both are present. A planted `secret.bks` fails the guard. The same bytes renamed
 
 ASSERT lines are printed once, when the leg finishes. The wrapper writes them to `summary.txt` and does not print that file again.
 
-Cursor Approval is not green on this head. The waiver on issue #51 stays open. The emulator job has not run here: this branch push is not a workflow trigger, and no pull request was opened. A later pull request that changes the operate script, `scripts/lib/**`, or `server/**` runs the job because those paths are in the filter.
+Cursor Approval is not green. Pull request #52 is open (https://github.com/themark-net/grapheneos-mdm/pull/52). On `e852c6f` the Cursor Approval check concluded `neutral`. The waiver on issue #51 stays open. This commit does not close it. emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. The repair on this branch has not had a green emulator-policy run. The image is an AOSP ATD emulator. Attestation is not asserted.
 
 ## Next slice
 

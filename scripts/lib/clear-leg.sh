@@ -2,10 +2,12 @@
 # Clear-leg gate for the emulator policy operate script.
 # Sourced by scripts/emulator-policy-restriction.sh. Not executed directly.
 #
-# On API 34 and above, a dumpsys counts only when device_policy has a
-# DevicePolicyEngine section and dumpsys user has UserInfo{ plus a
-# restriction header. A line matching '*** SERVICE ... DUMP TIMEOUT'
-# is a failed capture on every API level.
+# On API 34 and above, a dumpsys counts only when device_policy has an
+# anchored "Local Policies:" or "Global Policies:" line and dumpsys user
+# has UserInfo{ plus a restriction header. A mid-line mention of those
+# headers does not count. API 35 ATD dumps have no DevicePolicyEngine
+# line. A line matching '*** SERVICE ... DUMP TIMEOUT' is a failed
+# capture on every API level.
 #
 # CLEAR_LEG_STUB=1 (via run_clear_leg_stub) runs only this gate. It refuses
 # to run when the caller set SERIAL or ANDROID_SERIAL, so stub mode cannot
@@ -47,8 +49,8 @@ require_api_dumpsys() {
     fail "step ${step}: dumpsys contains *** SERVICE ... DUMP TIMEOUT"
   fi
   if [ "$api" -ge 34 ]; then
-    if ! grep -q -E '^[[:space:]]*DevicePolicyEngine([^A-Za-z0-9_]|$)' "$policy_file"; then
-      fail "${prefix} device_policy dump lacks a DevicePolicyEngine section"
+    if ! grep -q -E '^[[:space:]]*(Local Policies:|Global Policies:)[[:space:]]*$' "$policy_file"; then
+      fail "${prefix} device_policy dump lacks a Local Policies or Global Policies section"
     fi
     if ! grep -q -F 'UserInfo{' "$user_file"; then
       fail "${prefix} dumpsys user lacks UserInfo{"

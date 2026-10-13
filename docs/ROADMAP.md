@@ -71,9 +71,9 @@ The artifact excludes `fleet.sqlite*` (the WAL can hold an attestation chain) an
 
 ### Phase 7 — CI hardening
 
-**Done on this branch.** org-can-do. Issue #51, branch `build/p7-ci-hardening`, based on `main` at `0c54704`. Not Feature GO. Handoff: [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md). No pull request was opened. This phase is not merged.
+**In progress on this branch.** org-can-do. Issue #51, branch `build/p7-ci-hardening`, based on `main` at `0c54704`. Not Feature GO. Handoff: [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md). Pull request #52 is open (https://github.com/themark-net/grapheneos-mdm/pull/52). This phase is not merged.
 
-The same GitHub-hosted `ubuntu-latest` KVM job. No self-hosted runner. The operate script is [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). It still covers `disallowAddUser` and `disallowFactoryReset`. On API 34 and above, a dumpsys counts only when `dumpsys device_policy` has a `DevicePolicyEngine` section and `dumpsys user` has `UserInfo{` plus a restriction header (`Effective restrictions:`, `Device policy global restrictions:`, `Device policy local restrictions:`, or `Device policy restrictions:`). A capture that contains `*** SERVICE ... DUMP TIMEOUT` fails and names that marker. [server/policy_restriction.py](../server/policy_restriction.py) exits 2 for empty, unrecognised, timeout, or a missing API 34 marker, and exits 3 for an argparse usage error. Exit 2 and exit 3 are not a clear and are not "not applied".
+The same GitHub-hosted `ubuntu-latest` KVM job. No self-hosted runner. The operate script is [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). It still covers `disallowAddUser` and `disallowFactoryReset`. On API 34 and above, a dumpsys counts only when `dumpsys device_policy` has an anchored `Local Policies:` or `Global Policies:` line (a mid-line mention does not count; API 35 ATD dumps have no `DevicePolicyEngine` line) and `dumpsys user` has `UserInfo{` plus a restriction header (`Effective restrictions:`, `Device policy global restrictions:`, `Device policy local restrictions:`, or `Device policy restrictions:`). A capture that contains `*** SERVICE ... DUMP TIMEOUT` fails and names that marker. [server/policy_restriction.py](../server/policy_restriction.py) exits 2 for empty, unrecognised, timeout, or a missing API 34 marker, and exits 3 for an argparse usage error. Exit 2 and exit 3 are not a clear and are not "not applied".
 
 `CLEAR_LEG_STUB` is [scripts/lib/clear-leg.sh](../scripts/lib/clear-leg.sh). The operate script sources it. Stub mode refuses to run when the caller set `SERIAL` or `ANDROID_SERIAL`.
 
@@ -81,9 +81,9 @@ The BouncyCastle keystore exclusion is the workflow line `!/tmp/mdm-ci/**/*.bks`
 
 JavaScript actions in `ci.yml` and `emulator-policy.yml` are pinned to Node 24 releases. `reactivecircus/android-emulator-runner` v2.38.0 was already Node 24. `PolicyRestrictionTest` compares restriction pairs as a map. The image is an AOSP ATD emulator. Attestation is not asserted.
 
-Cursor Approval is not green. On PR #50 head `c9e646b` the check `Cursor Approval Agent: Pull Request Router and Approver` concluded `neutral` (`Approval Agent run encountered an error`, run `bc-9a8d6e3e`). The same check was `success` on `ef5b380`. Main `0c54704` has no Cursor Approval check. This branch was not opened as a pull request, so the check has not run on the Phase 7 head. The waiver on issue #51 stays open.
+Cursor Approval is not green. On PR #50 head `c9e646b` the check `Cursor Approval Agent: Pull Request Router and Approver` concluded `neutral` (`Approval Agent run encountered an error`, run `bc-9a8d6e3e`). The same check was `success` on `ef5b380`. Main `0c54704` has no Cursor Approval check. Pull request #52 is open. On `e852c6f` that check concluded `neutral`. The waiver on issue #51 stays open. This commit does not close it.
 
-The emulator-policy job has not run on this head. The workflow runs on `pull_request`, on `push` to `main`, and on `workflow_dispatch`. A push of `build/p7-ci-hardening` is none of those. Path filters include `scripts/emulator-policy-restriction.sh` and `scripts/lib/**`, so a later pull request that touches those paths runs the job.
+emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. The repair on this branch has not had a green emulator-policy run. The image is an AOSP ATD emulator. Attestation is not asserted.
 
 ## Next slice
 
