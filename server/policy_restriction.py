@@ -3,8 +3,11 @@
 
 Reads `dumpsys device_policy` and `dumpsys user`. Exits 0 and prints the
 matching lines when the restriction is applied. Exits 1 when a recognised
-dumpsys does not show it applied. Exits 2 when the input is empty or
-unrecognised. Exit 2 is not a clear.
+dumpsys does not show it applied. Exits 2 when the input is empty,
+unrecognised, contains `*** SERVICE ... DUMP TIMEOUT`, or, when
+`--api-level` is 34 or higher, lacks a DevicePolicyEngine section,
+`UserInfo{`, or a restriction header. Exits 3 on an argparse usage error.
+Exit 2 and exit 3 are not a clear.
 
 A match is a whole restriction token. `no_add_user` does not match
 `no_add_managed_profile`, `no_add_clone_profile`, or `no_add_private_profile`.
@@ -14,6 +17,10 @@ dumpsys does not show the token, the process prints
 `restriction <token> is not applied` on stderr and exits 1. That sentence
 plus exit 1 is the clear-leg proof. Empty text, or text with no dumpsys
 marker, prints `dumpsys input is empty or unrecognised` and exits 2.
+A usage error (missing or unknown argument) exits 3 and does not print
+that sentence. `--api-level` 34 or higher also exits 2, naming the missing
+marker, unless device_policy has a DevicePolicyEngine section and the user
+dump has `UserInfo{` plus one of the restriction headers above.
 
 dumpsys user evidence is a line inside one of these blocks:
 
@@ -65,11 +72,21 @@ def applied_lines(device_policy: str, user_dump: str, restriction: str) -> list[
     return found
 
 
+class _Parser(argparse.ArgumentParser):
+    """Usage errors exit 3 so they are not the empty-dumpsys exit 2."""
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        raise SystemExit(3)
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = _Parser(description=__doc__)
     parser.add_argument("--restriction", required=True)
     parser.add_argument("--device-policy", required=True, type=Path)
     parser.add_argument("--user", required=True, type=Path)
+    parser.add_argument("--api-level", type=int, default=None)
     args = parser.parse_args(argv)
     try:
         device_policy = args.device_policy.read_text(encoding="utf-8", errors="replace")
@@ -77,8 +94,9 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as exc:
         print(f"could not read dumpsys file: {exc}", file=sys.stderr)
         return 1
-    if dumpsys_input_problem(device_policy, user_dump) is not None:
-        print("dumpsys input is empty or unrecognised", file=sys.stderr)
+    problem = dumpsys_input_problem(device_policy, user_dump, args.api_level)
+    if problem is not None:
+        print(_problem_message(problem), file=sys.stderr)
         return 2
     try:
         lines = applied_lines(device_policy, user_dump, args.restriction)
@@ -110,14 +128,50 @@ _DUMP_MARKERS = (
 )
 
 
-def dumpsys_input_problem(device_policy: str, user_dump: str) -> str | None:
-    """'empty' or 'unrecognised' when this capture must not count as a clear."""
+_TIMEOUT = re.compile(r"\*\*\* SERVICE .*DUMP TIMEOUT")
+_ENGINE_SECTION = re.compile(r"(?m)^[ \t]*DevicePolicyEngine([^A-Za-z0-9_]|$)")
+_RESTRICTION_HEADER = re.compile(
+    r"(?m)^[ \t]*(?:Effective restrictions:|Device policy global restrictions:"
+    r"|Device policy local restrictions:|Device policy restrictions:)"
+)
+
+
+def dumpsys_input_problem(
+    device_policy: str,
+    user_dump: str,
+    api_level: int | None = None,
+) -> str | None:
+    """Why this capture must not count as a clear, or None when it may.
+
+    'timeout', 'empty', 'unrecognised', or 'missing ...' (API 34+).
+    """
+    if _TIMEOUT.search(device_policy) or _TIMEOUT.search(user_dump):
+        return "timeout"
     if not device_policy.strip() and not user_dump.strip():
         return "empty"
+    if api_level is not None and api_level >= 34:
+        missing: list[str] = []
+        if _ENGINE_SECTION.search(device_policy) is None:
+            missing.append("DevicePolicyEngine section")
+        if "UserInfo{" not in user_dump:
+            missing.append("UserInfo{")
+        if _RESTRICTION_HEADER.search(user_dump) is None:
+            missing.append("restriction header")
+        if missing:
+            return "missing " + ", ".join(missing)
+        return None
     blob = f"{device_policy}\n{user_dump}"
     if not any(marker in blob for marker in _DUMP_MARKERS):
         return "unrecognised"
     return None
+
+
+def _problem_message(problem: str) -> str:
+    if problem == "timeout":
+        return "dumpsys input is empty or unrecognised: *** SERVICE ... DUMP TIMEOUT"
+    if problem.startswith("missing "):
+        return f"dumpsys input is empty or unrecognised: {problem}"
+    return "dumpsys input is empty or unrecognised"
 
 
 def _normalize(text: str) -> str:

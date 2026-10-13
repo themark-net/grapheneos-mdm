@@ -15,7 +15,7 @@ The device-owner script is [scripts/emulator-device-owner.sh](../scripts/emulato
 
 The same-database attestation script is [scripts/emulator-same-db-attestation.sh](../scripts/emulator-same-db-attestation.sh). It is Phase 3. Details are in [Same-database attestation](#same-database-attestation-phase-3).
 
-The disallowAddUser script is [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). It is Phase 4 (issue #45). `RESTRICTION=disallowFactoryReset` is Phase 6 (issue #49). Details are in [Phase 4 — disallowAddUser on the operator page](#phase-4--disallowadduser-on-the-operator-page) and [Phase 6 — disallowFactoryReset](#phase-6--disallowfactoryreset-on-the-kvm-job).
+The user-restriction script is [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). `disallowAddUser` is Phase 4 (issue #45). `RESTRICTION=disallowFactoryReset` is Phase 6 (issue #49). Phase 7 (issue #51) is the CI hardening of that same script. Details are in [Phase 4 — disallowAddUser on the operator page](#phase-4--disallowadduser-on-the-operator-page), [Phase 6 — disallowFactoryReset](#phase-6--disallowfactoryreset-on-the-kvm-job), and [Phase 7 — CI hardening](#phase-7--ci-hardening).
 
 Phase 5 (issue #47) runs that script on a GitHub-hosted KVM runner. Phase 6 adds the factory-reset legs to the same job. Details are in [Phase 5 — GitHub-hosted KVM runner](#phase-5--github-hosted-kvm-runner).
 
@@ -94,9 +94,9 @@ lastCheckinAt 2026-10-06T17:40:49Z
 Issue #45. The image is the same AOSP ATD emulator. This section does not assert attestation and does not call the image GrapheneOS.
 
 ```bash
-scripts/emulator-policy-disallow-add-user.sh
-DISALLOW_ADD_USER=false scripts/emulator-policy-disallow-add-user.sh
-DISALLOW_ADD_USER=absent scripts/emulator-policy-disallow-add-user.sh
+scripts/emulator-policy-restriction.sh
+DISALLOW_ADD_USER=false scripts/emulator-policy-restriction.sh
+DISALLOW_ADD_USER=absent scripts/emulator-policy-restriction.sh
 ```
 
 `OUT` defaults to `/tmp/mdm-phase4-policy`. `ANDROID_HOME`, AVD `mdm36`, serial `emulator-5574`, and `ANDROID_ADB_SERVER_PORT=5038` match the other bench scripts. This tree has no `gradlew`. Set `GRADLE_BIN` to a Gradle 8.9 binary, or the script uses `gradle` on `PATH`.
@@ -119,7 +119,7 @@ The log order is enroll, check-in, restriction, operator list. Guest temp files 
 
 If the restriction is missing, the script exits non-zero and names that step. Read `PolicyManager` logcat for the policyFlags parse. If `UI_PORT` (default 8787) is busy, or the UI is bound to `0.0.0.0`, `*`, or `::`, the script exits and does not bind off 127.0.0.1. If the emulator or KVM is unavailable, that is a host blocker. Do not fake a PASS.
 
-`true-then-false` runs the `true` steps through the operator list, then writes `desired-false.json` (`{"disallowAddUser": false}`, noop id `emulator-phase5-clear`), stores it as a per-device override with `server/fleet_store.py --db … set-desired <deviceId>`, and broadcasts a second check-in. It does not remove the owner and does not `pm clear` in between. It waits for two `lab-checkin outcome=SUCCESS` lines, two `check-in deviceId=` lines and two `Desired state policy flags applied` lines, saves `device_policy-after-false.txt` and `dumpsys_user-after-false.txt`, and requires the after-false `device_policy` dump to be non-empty and to contain `DevicePolicyEngine`, `UserRestrictionPolicyKey`, or a Device Owner line. `policy_restriction.py` must exit 1 and print `restriction no_add_user is not applied`. Exit 0 is `FAIL: step clear: no_add_user still applied after disallowAddUser=false`. Exit 2 (empty or unrecognised dumpsys) is a failed clear. Any other exit, or exit 1 without that sentence, is a failed clear. The agent maps `false` to `DevicePolicyManager.clearUserRestriction` (`PolicyManager.applyDesiredState`, covered by `PolicyRestrictionTest.falseFlagsClearRestrictions`).
+`true-then-false` runs the `true` steps through the operator list, then writes `desired-false.json` (`{"disallowAddUser": false}`, noop id `emulator-phase5-clear`), stores it as a per-device override with `server/fleet_store.py --db … set-desired <deviceId>`, and broadcasts a second check-in. It does not remove the owner and does not `pm clear` in between. It waits for two `lab-checkin outcome=SUCCESS` lines, two `check-in deviceId=` lines and two `Desired state policy flags applied` lines, saves `device_policy-after-false.txt` and `dumpsys_user-after-false.txt`, and, on API 34 and above, requires a `DevicePolicyEngine` section in the after-false `device_policy` dump, `UserInfo{` and a restriction header in `dumpsys user`, and no `*** SERVICE ... DUMP TIMEOUT` line. `policy_restriction.py` must exit 1 and print `restriction no_add_user is not applied`. Exit 0 is `FAIL: step clear: no_add_user still applied after disallowAddUser=false`. Exit 2 (empty, unrecognised, timeout, or a missing API 34 marker) is a failed clear. Exit 3 is an argparse usage error and is also a failed clear. Any other exit, or exit 1 without that sentence, is a failed clear. The agent maps `false` to `DevicePolicyManager.clearUserRestriction` (`PolicyManager.applyDesiredState`, covered by `PolicyRestrictionTest.falseFlagsClearRestrictions`).
 
 ### Post-run emulator state
 
@@ -196,7 +196,7 @@ Issue #47. The image is the same AOSP ATD Android 15 emulator (`system-images;an
 [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml), job `AOSP ATD emulator policy (disallowAddUser, disallowFactoryReset)`, runs on `ubuntu-latest`. There is no self-hosted runner. Steps:
 
 1. Enable KVM with the udev rule `KERNEL=="kvm", GROUP="kvm", MODE="0666"` on the hosted runner.
-2. `actions/setup-java` (Temurin 17), `gradle/actions/setup-gradle` (Gradle 8.9), and `actions/setup-python` (3.12), each pinned by commit SHA, as are `actions/checkout` and `actions/upload-artifact`.
+2. `actions/setup-java` v6.0.1 (Temurin 17), `gradle/actions/setup-gradle` v6.4.0 (Gradle 8.9), and `actions/setup-python` v7.0.0 (3.12), each pinned by commit SHA, as are `actions/checkout` v7.0.1 and `actions/upload-artifact` v7.0.2. Those releases run on Node 24. `reactivecircus/android-emulator-runner` v2.38.0 was already Node 24.
 3. Build the test-only debug APK before the emulator boots.
 4. `reactivecircus/android-emulator-runner` v2.38.0 (pinned by SHA) with `api-level: 35`, `target: aosp_atd`, `arch: x86_64`, `avd-name: mdm36` boots the emulator on `emulator-5554` and runs `scripts/ci-emulator-policy.sh`.
 5. If that step fails before the wrapper creates `/tmp/mdm-ci/script-started`, the same emulator step runs once more. See [Boot retry](#boot-retry).
@@ -223,7 +223,7 @@ The emulator-runner step is attempted once. The wrapper touches `/tmp/mdm-ci/scr
 
 `CERTS_DIR` on the runner is `/tmp/mdm-certs/<leg>`. That directory is not the upload path. The upload also drops `!/tmp/mdm-ci/**/certs/**`, `fleet.sqlite*`, and certificate/key suffixes `.pem`, `.p12`, `.key`, `.crt`, `.der`, `.cer`, `.pfx`, `.jks`, `.keystore`, `.csr`, and `.bks`. The wrapper fails the job if a certificate or key file, or a `certs/` directory, is under `/tmp/mdm-ci`. After that check it deletes `fleet.sqlite*` and fails if any remain. The exit trap deletes them on an early exit too. The nimo default for certs is still `$OUT/certs`. The sqlite for a nimo run stays under `OUT`.
 
-Triggers: `pull_request` and `push` to `main`, filtered to the operate script, the CI wrapper, `server/**`, `app/**`, `protocol/**`, the Gradle files and the workflow file, plus `workflow_dispatch`. There is no cron. Concurrency cancels an older run on the same PR or ref. The job timeout is 45 minutes. `docs/**` is not in the filter, so a docs-only `push` to `main` does not run this job. On `pull_request` the filter matches the whole PR diff, so a docs-only head still re-runs the job while the PR also changes a listed path.
+Triggers: `pull_request` and `push` to `main`, filtered to the operate script, `scripts/lib/**`, the CI wrapper, `server/**`, `app/**`, `protocol/**`, the Gradle files and the workflow file, plus `workflow_dispatch`. There is no cron. Concurrency cancels an older run on the same PR or ref. The job timeout is 45 minutes. `docs/**` is not in the filter, so a docs-only `push` to `main` does not run this job. On `pull_request` the filter matches the whole PR diff, so a docs-only head still re-runs the job while the PR also changes a listed path.
 
 ### CI result
 
@@ -248,10 +248,10 @@ Issue #49. The image is the same AOSP ATD Android 15 emulator (`system-images;an
 The operate script is the Phase 4 script with `RESTRICTION=disallowFactoryReset`. The mode env is `DISALLOW_FACTORY_RESET`. Default `RESTRICTION` remains `disallowAddUser`, so the Phase 4 command is unchanged.
 
 ```bash
-RESTRICTION=disallowFactoryReset scripts/emulator-policy-disallow-add-user.sh
-RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=false scripts/emulator-policy-disallow-add-user.sh
-RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=absent scripts/emulator-policy-disallow-add-user.sh
-RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=true-then-false scripts/emulator-policy-disallow-add-user.sh
+RESTRICTION=disallowFactoryReset scripts/emulator-policy-restriction.sh
+RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=false scripts/emulator-policy-restriction.sh
+RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=absent scripts/emulator-policy-restriction.sh
+RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=true-then-false scripts/emulator-policy-restriction.sh
 ```
 
 | `DISALLOW_FACTORY_RESET` | `policyFlags` | Expected script result |
@@ -259,7 +259,7 @@ RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=true-then-false scripts/
 | `true` (default) | `{"disallowFactoryReset": true}` | Exit 0. `no_factory_reset` is applied. The PASS line names that flag and the device id. |
 | `false` | `{"disallowFactoryReset": false}` | Exit 1. `FAIL: restriction no_factory_reset not applied (DISALLOW_FACTORY_RESET=false)`. |
 | `absent` | `{}` | Exit 1. `FAIL: restriction no_factory_reset not applied (DISALLOW_FACTORY_RESET=absent)`. |
-| `true-then-false` | `{"disallowFactoryReset": true}`, then a per-device override `{"disallowFactoryReset": false}` | Exit 0 only when `no_factory_reset` is applied after the first check-in and, after the second, the device_policy dump has a DevicePolicyEngine, UserRestrictionPolicyKey, or Device Owner marker and `policy_restriction.py` exits 1 with `restriction no_factory_reset is not applied`. Empty or cut-off dumpsys fails. No owner reset in between. |
+| `true-then-false` | `{"disallowFactoryReset": true}`, then a per-device override `{"disallowFactoryReset": false}` | Exit 0 only when `no_factory_reset` is applied after the first check-in and, after the second, API 34+ sees a DevicePolicyEngine section, `UserInfo{`, and a restriction header, with no DUMP TIMEOUT line, and `policy_restriction.py` exits 1 with `restriction no_factory_reset is not applied`. Empty, cut-off, or timed-out dumpsys fails. No owner reset in between. |
 
 `false` and `absent` are expected to FAIL. That is the negative proof. The desired command id is `emulator-phase6`. The clear override uses noop id `emulator-phase6-clear`. Setting the restriction does not factory-reset the device.
 
@@ -299,3 +299,44 @@ RESULT: PASS (AOSP ATD emulator, not GrapheneOS; attestation not asserted)
 ```
 
 Protocol schemas and Android unit tests on the same code SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/38287586836
+
+## Phase 7 — CI hardening
+
+Issue #51. Branch `build/p7-ci-hardening`, based on `main` at `0c54704`. Not Feature GO. The image is still the AOSP ATD Android 15 emulator. Attestation is not asserted. No Pixel. No self-hosted runner. Handoff: [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md).
+
+On API 34 and above the restriction step and the clear leg both require:
+
+- a `DevicePolicyEngine` section line in `dumpsys device_policy`
+- `UserInfo{` in `dumpsys user`
+- one restriction header: `Effective restrictions:`, `Device policy global restrictions:`, `Device policy local restrictions:`, or `Device policy restrictions:`
+- no line matching `*** SERVICE ... DUMP TIMEOUT`
+
+A missing marker fails and names that marker. The dump stays in the leg's log directory, which the workflow uploads (with the cert and sqlite exclusions). Do not loosen the matcher to make a timed-out capture green.
+
+`policy_restriction.py` exits 0 when the token is applied, 1 when a recognised dump does not show it, 2 when the input is empty, unrecognised, timed out, or missing an API 34 marker, and 3 on an argparse usage error. Exit 3 is not exit 2. Neither 2 nor 3 prints `restriction <token> is not applied`.
+
+`CLEAR_LEG_STUB=1` sources [scripts/lib/clear-leg.sh](../scripts/lib/clear-leg.sh) and does not boot an emulator. It exits before any adb command when `SERIAL` or `ANDROID_SERIAL` is set. Host fixtures leave those unset. `API_LEVEL` defaults to 35 for the stub.
+
+The upload exclusion for a BouncyCastle keystore is this line in [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml):
+
+```
+!/tmp/mdm-ci/**/*.bks
+```
+
+The cert guard entry in [scripts/lib/cert-guard.sh](../scripts/lib/cert-guard.sh) is:
+
+```
+-o -name '*.bks'
+```
+
+Both are present. A planted `secret.bks` fails the guard. The same bytes renamed to `secret.txt` do not.
+
+`PolicyRestrictionTest` compares `userRestrictionUpdates` as a map, so pair order does not matter and a dropped key fails the test.
+
+ASSERT lines are printed once, when the leg finishes. The wrapper writes them to `summary.txt` and does not print that file again.
+
+Cursor Approval is not green on this head. The waiver on issue #51 stays open. The emulator job has not run here: this branch push is not a workflow trigger, and no pull request was opened. A later pull request that changes the operate script, `scripts/lib/**`, or `server/**` runs the job because those paths are in the filter.
+
+## Next slice
+
+None. The drive is at the Pixel/GrapheneOS founder-only stop. See [docs/ROADMAP.md](ROADMAP.md).

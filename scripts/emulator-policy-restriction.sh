@@ -14,12 +14,16 @@
 # absent sends {}. true-then-false applies true exactly like the true mode,
 # then, with no owner reset and no pm clear, sets a per-device override
 # {"<flag>": false} in the same sqlite, broadcasts a second check-in, and
-# requires the dumpsys token to be gone. Gone means the after-false
-# device_policy dump is non-empty and contains DevicePolicyEngine,
-# UserRestrictionPolicyKey, or a Device Owner line, and policy_restriction.py
-# exits 1 and prints "restriction <token> is not applied". Exit 2 (empty or
-# unrecognised dumpsys) is a failed clear. A bad RESTRICTION or mode, or
+# requires the dumpsys token to be gone. On API 34 and above, gone means the
+# after-false device_policy dump has a DevicePolicyEngine section, dumpsys
+# user has UserInfo{ and a restriction header, neither dump contains
+# '*** SERVICE ... DUMP TIMEOUT', and policy_restriction.py exits 1 and
+# prints "restriction <token> is not applied". Exit 2 (empty, unrecognised,
+# timeout, or a missing API 34 marker) is a failed clear. Exit 3 (argparse
+# usage) is a failed clear and is not exit 2. A bad RESTRICTION or mode, or
 # both mode env vars set at once, exits before the emulator is touched.
+# CLEAR_LEG_STUB=1 sources scripts/lib/clear-leg.sh and runs only that gate.
+# It refuses to run when SERIAL or ANDROID_SERIAL was set by the caller.
 #
 # disallowFactoryReset only sets or clears the user restriction
 # no_factory_reset. This script does not factory-reset, wipe, or pass
@@ -55,11 +59,16 @@
 # - true-then-false: if the token is still applied after the false
 #   check-in, exit non-zero with
 #   FAIL: step clear: <token> still applied after <flag>=false.
-#   The after-false device_policy dump must be non-empty and contain
-#   DevicePolicyEngine, UserRestrictionPolicyKey, or a Device Owner line.
-#   policy_restriction.py must exit 1 and print
-#   "restriction <token> is not applied". Exit 2 (empty or unrecognised
-#   dumpsys) is a failed clear. A read error is not a clear.
+#   On API 34 and above the after-false device_policy dump must contain a
+#   DevicePolicyEngine section, and dumpsys user must contain UserInfo{ and
+#   a restriction header. A '*** SERVICE ... DUMP TIMEOUT' line fails the
+#   step and names that marker. policy_restriction.py must exit 1 and print
+#   "restriction <token> is not applied". Exit 2 (empty, unrecognised,
+#   timeout, or a missing marker) is a failed clear. Exit 3 is a usage
+#   error, not a clear. A read error is not a clear.
+# - CLEAR_LEG_STUB=1 with SERIAL or ANDROID_SERIAL set refuses to run.
+#   Unset those variables for a host-only fixture. The stub does not
+#   talk to adb.
 # - Setting both DISALLOW_ADD_USER and DISALLOW_FACTORY_RESET is a fail
 #   before the emulator is used. Only the env var for RESTRICTION may be set.
 # - Post-run state: after a true run the emulator is left with this app as
@@ -102,6 +111,9 @@ DEFAULT_SDK="$(cd "$ROOT/../android-sdk" 2>/dev/null && pwd || true)"
 export ANDROID_HOME JAVA_HOME ANDROID_SDK_ROOT ANDROID_AVD_HOME ANDROID_USER_HOME ANDROID_ADB_SERVER_PORT
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 
+# Saved before the nimo default. CLEAR_LEG_STUB refuses a caller-supplied target.
+_CALLER_SERIAL="${SERIAL-}"
+_CALLER_ANDROID_SERIAL="${ANDROID_SERIAL-}"
 SERIAL="${SERIAL:-emulator-5574}"
 AVD="${AVD:-mdm36}"
 CONSOLE_PORT="${CONSOLE_PORT:-5574}"
@@ -121,6 +133,9 @@ fail() {
   echo "FAIL: $*" >&2
   exit 1
 }
+
+# shellcheck source=scripts/lib/clear-leg.sh
+source "$ROOT/scripts/lib/clear-leg.sh"
 
 need() {
   command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"
@@ -161,49 +176,8 @@ if [ "$RESTRICTION" = "disallowFactoryReset" ] && [ -n "${DISALLOW_ADD_USER+x}" 
   fail "DISALLOW_ADD_USER must not be set when RESTRICTION=disallowFactoryReset (got: ${DISALLOW_ADD_USER})"
 fi
 
-# Clear-leg gate. Exit via fail() unless the after-false capture is a real
-# dumpsys and policy_restriction.py exits 1 with the not-applied sentence.
-# CLEAR_LEG_STUB=1 runs only this gate, so a test can point DEVICE_POLICY_FILE
-# and USER_DUMP_FILE at a fake dumpsys. It does not boot an emulator.
-accept_cleared_restriction() {
-  local policy_file="$1" user_file="$2" out_file="$3"
-  local rc msg
-  if [ ! -s "$policy_file" ] || [ ! -s "$user_file" ]; then
-    fail "step clear: after-false dumpsys is empty"
-  fi
-  if ! grep -q -e 'DevicePolicyEngine' -e 'UserRestrictionPolicyKey' -e 'Device Owner' -e 'DeviceOwner' "$policy_file"; then
-    fail "step clear: after-false device_policy dump lacks DevicePolicyEngine, UserRestrictionPolicyKey, or Device Owner"
-  fi
-  set +e
-  python3 "$ROOT/server/policy_restriction.py" \
-    --restriction "$TOKEN" \
-    --device-policy "$policy_file" \
-    --user "$user_file" \
-    >"$out_file" 2>&1
-  rc=$?
-  set -e
-  cat "$out_file"
-  if [ "$rc" -eq 2 ]; then
-    fail "step clear: policy_restriction.py rejected empty or unrecognised dumpsys (exit=2)"
-  fi
-  if [ "$rc" -eq 0 ]; then
-    fail "step clear: ${TOKEN} still applied after ${FLAG_KEY}=false"
-  fi
-  if [ "$rc" -ne 1 ]; then
-    fail "step clear: policy_restriction.py exit=${rc}, expected 1"
-  fi
-  msg="restriction ${TOKEN} is not applied"
-  if ! grep -qF "$msg" "$out_file"; then
-    fail "step clear: policy_restriction.py did not report '${msg}' (exit=${rc})"
-  fi
-}
-
 if [ "${CLEAR_LEG_STUB:-}" = "1" ]; then
-  [ -n "${DEVICE_POLICY_FILE:-}" ] || fail "CLEAR_LEG_STUB requires DEVICE_POLICY_FILE"
-  [ -n "${USER_DUMP_FILE:-}" ] || fail "CLEAR_LEG_STUB requires USER_DUMP_FILE"
-  mkdir -p "${OUT:-/tmp}"
-  accept_cleared_restriction "$DEVICE_POLICY_FILE" "$USER_DUMP_FILE" "${OUT:-/tmp}/restriction-after-false.txt"
-  echo "PASS: clear leg accepted ${TOKEN}"
+  run_clear_leg_stub
   exit 0
 fi
 
@@ -473,6 +447,11 @@ case "$FINGERPRINT" in
   *) fail "expected AOSP ATD Android 15 fingerprint, got: $FINGERPRINT" ;;
 esac
 echo "model=$(adb -s "$SERIAL" shell getprop ro.product.model | tr -d '\r')"
+API_LEVEL="$(adb -s "$SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
+case "$API_LEVEL" in
+  ''|*[!0-9]*) fail "ro.build.version.sdk is not an integer: ${API_LEVEL}" ;;
+esac
+echo "API_LEVEL=$API_LEVEL"
 
 if [ ! -f "$ROOT/local.properties" ]; then
   printf 'sdk.dir=%s\n' "$ANDROID_HOME" >"$ROOT/local.properties"
@@ -636,15 +615,23 @@ adb -s "$SERIAL" shell dumpsys device_policy >"$OUT/device_policy.txt" \
   || fail "step restriction: dumpsys device_policy failed"
 adb -s "$SERIAL" shell dumpsys user >"$OUT/dumpsys_user.txt" \
   || fail "step restriction: dumpsys user failed"
+require_api_dumpsys restriction "$OUT/device_policy.txt" "$OUT/dumpsys_user.txt" "$API_LEVEL"
 set +e
 python3 "$ROOT/server/policy_restriction.py" \
   --restriction "$TOKEN" \
   --device-policy "$OUT/device_policy.txt" \
   --user "$OUT/dumpsys_user.txt" \
+  --api-level "$API_LEVEL" \
   >"$OUT/restriction-match.txt" 2>&1
 RESTRICT_RC=$?
 set -e
 cat "$OUT/restriction-match.txt"
+if [ "$RESTRICT_RC" -eq 3 ]; then
+  fail "step restriction: policy_restriction.py usage error (exit=3)"
+fi
+if [ "$RESTRICT_RC" -eq 2 ]; then
+  fail "step restriction: policy_restriction.py rejected empty or unrecognised dumpsys (exit=2)"
+fi
 if [ "$RESTRICT_RC" -ne 0 ]; then
   fail "restriction ${TOKEN} not applied (${MODE_ENV}=${MODE})"
 fi
@@ -745,7 +732,8 @@ JSON
   accept_cleared_restriction \
     "$OUT/device_policy-after-false.txt" \
     "$OUT/dumpsys_user-after-false.txt" \
-    "$OUT/restriction-after-false.txt"
+    "$OUT/restriction-after-false.txt" \
+    "$API_LEVEL"
   OWNERS="$(adb -s "$SERIAL" shell dpm list-owners 2>&1 | tr -d '\r')"
   echo "$OWNERS" | grep -q "$PKG" || fail "step clear: $PKG is not device owner after the false check-in"
   echo "PASS: ${TOKEN} applied via ${FLAG_KEY}=true, then cleared by ${FLAG_KEY}=false with no owner reset; deviceId=${DEVICE_ID}. AOSP ATD emulator, not GrapheneOS; attestation not asserted."

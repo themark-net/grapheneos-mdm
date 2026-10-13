@@ -4,13 +4,15 @@ Issue #49. Branch `build/p6-factory-reset`, based on `main` at `e43fc37` (Phase 
 
 The image is the AOSP ATD Android 15 emulator (`system-images;android-35;aosp_atd;x86_64`, `avd-name: mdm36`). It is not GrapheneOS. Attestation is not asserted. No Pixel. The operate script does not factory-reset or wipe.
 
+Phase 7 (issue #51) keeps this script at [scripts/emulator-policy-restriction.sh](../../scripts/emulator-policy-restriction.sh) and tightens the API 34+ dumpsys markers. The marker sentences below are what Phase 6 shipped. The current rule is [HANDOFF-p7-ci-hardening-2026-10-13.md](HANDOFF-p7-ci-hardening-2026-10-13.md).
+
 Lane: nimo was offline, so this ran as a Cursor cloud agent. No self-hosted runner and no host changes.
 
 ## What shipped
 
 - [.github/workflows/emulator-policy.yml](../../.github/workflows/emulator-policy.yml) — same GitHub-hosted `ubuntu-latest` KVM job, now named `AOSP ATD emulator policy (disallowAddUser, disallowFactoryReset)`. Path filters, the single boot retry (`/tmp/mdm-ci/script-started`), `workflow_dispatch`, and the 45 minute timeout are unchanged. No cron. The upload excludes `fleet.sqlite*` and `*.pem` / `*.p12` / `*.key` / `*.crt` / `*.der` / `*.cer` / `*.pfx` / `*.jks` / `*.keystore` / `*.csr` / `*.bks`, plus `certs/`.
 - [scripts/ci-emulator-policy.sh](../../scripts/ci-emulator-policy.sh) — runs disallowAddUser (`absent`, `false`, `true-then-false`, `true`), asserts device owner and `no_add_user`, then runs disallowFactoryReset under the same four modes (`factory-absent`, `factory-false`, `factory-true-then-false`, `factory-true`) and asserts device owner and `no_factory_reset`. Every exit code is asserted. Each leg writes a `restriction:` line, the `policy_restriction.py` output, the `GET /api/devices` row, and the PASS or FAIL line to `$GITHUB_STEP_SUMMARY`. Before exit it deletes `fleet.sqlite*` under the log dir. The cert check also rejects `.der`, `.cer`, `.pfx`, `.jks`, `.keystore`, `.csr`, and `.bks`.
-- [scripts/emulator-policy-disallow-add-user.sh](../../scripts/emulator-policy-disallow-add-user.sh) — `RESTRICTION=disallowAddUser` (default) or `disallowFactoryReset`. The factory-reset mode env is `DISALLOW_FACTORY_RESET`. `true-then-false` exits 0 only when the after-false `device_policy` dump is non-empty and contains `DevicePolicyEngine`, `UserRestrictionPolicyKey`, or a Device Owner line, and `policy_restriction.py` exits 1 and prints `restriction <token> is not applied`. Exit 2 is a failed clear. The two mode env vars must not both be set. The default invocation and the add-user PASS/FAIL lines are unchanged.
+- [scripts/emulator-policy-restriction.sh](../../scripts/emulator-policy-restriction.sh) — `RESTRICTION=disallowAddUser` (default) or `disallowFactoryReset`. The factory-reset mode env is `DISALLOW_FACTORY_RESET`. `true-then-false` exits 0 only when the after-false `device_policy` dump is non-empty and contains `DevicePolicyEngine`, `UserRestrictionPolicyKey`, or a Device Owner line, and `policy_restriction.py` exits 1 and prints `restriction <token> is not applied`. Exit 2 is a failed clear. The two mode env vars must not both be set. The default invocation and the add-user PASS/FAIL lines are unchanged.
 - [server/policy_restriction.py](../../server/policy_restriction.py) — same match rules. Empty or unrecognised dumpsys exits 2 and prints `dumpsys input is empty or unrecognised`, not the not-applied sentence. A recognised dump that lacks the token still exits 1 with `restriction <token> is not applied`. Tests cover `no_factory_reset` on the Android 15 `userRestriction_` key, an explicit false, empty and cut-off input, and that a `no_factory_reset` dump is not `no_add_user` (and the reverse).
 - App: `PolicyManager.userRestrictionUpdates` already maps `disallowFactoryReset` true to `UserManager.DISALLOW_FACTORY_RESET` (`no_factory_reset`) and false to clear. `PolicyRestrictionTest` lists that pair for both values. The desired-state schema already has the flag. No app change.
 
@@ -23,9 +25,9 @@ On GitHub: a PR that touches the filtered paths, or Actions → "Emulator policy
 On nimo (unchanged add-user default):
 
 ```bash
-GRADLE_BIN=/tmp/gradle-8.9/bin/gradle scripts/emulator-policy-disallow-add-user.sh
-RESTRICTION=disallowFactoryReset GRADLE_BIN=/tmp/gradle-8.9/bin/gradle scripts/emulator-policy-disallow-add-user.sh
-RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=true-then-false GRADLE_BIN=/tmp/gradle-8.9/bin/gradle scripts/emulator-policy-disallow-add-user.sh
+GRADLE_BIN=/tmp/gradle-8.9/bin/gradle scripts/emulator-policy-restriction.sh
+RESTRICTION=disallowFactoryReset GRADLE_BIN=/tmp/gradle-8.9/bin/gradle scripts/emulator-policy-restriction.sh
+RESTRICTION=disallowFactoryReset DISALLOW_FACTORY_RESET=true-then-false GRADLE_BIN=/tmp/gradle-8.9/bin/gradle scripts/emulator-policy-restriction.sh
 ```
 
 `false` and `absent` are expected to exit 1. Do not factory-reset the emulator to prove the flag.
@@ -35,7 +37,7 @@ Local checks, no device:
 ```bash
 python3 -m unittest discover -s server/tests -v
 python3 -m unittest discover -s protocol/tests -v
-bash -n scripts/emulator-policy-disallow-add-user.sh scripts/ci-emulator-policy.sh
+bash -n scripts/emulator-policy-restriction.sh scripts/ci-emulator-policy.sh
 actionlint .github/workflows/*.yml
 ```
 

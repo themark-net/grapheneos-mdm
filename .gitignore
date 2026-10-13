@@ -46,3 +46,4 @@ android-sdk/
 system-images/
 *.img
 emulator-*.pid
+.project-map/

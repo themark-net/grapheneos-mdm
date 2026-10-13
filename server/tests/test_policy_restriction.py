@@ -263,6 +263,7 @@ class PolicyRestrictionTest(unittest.TestCase):
         device_policy: str,
         user_dump: str,
         restriction: str = "no_add_user",
+        api_level: int | None = None,
     ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -270,16 +271,19 @@ class PolicyRestrictionTest(unittest.TestCase):
             user_path = root / "dumpsys_user.txt"
             policy_path.write_text(device_policy, encoding="utf-8")
             user_path.write_text(user_dump, encoding="utf-8")
+            cmd = [
+                *CLI,
+                "--restriction",
+                restriction,
+                "--device-policy",
+                str(policy_path),
+                "--user",
+                str(user_path),
+            ]
+            if api_level is not None:
+                cmd.extend(["--api-level", str(api_level)])
             return subprocess.run(
-                [
-                    *CLI,
-                    "--restriction",
-                    restriction,
-                    "--device-policy",
-                    str(policy_path),
-                    "--user",
-                    str(user_path),
-                ],
+                cmd,
                 check=False,
                 capture_output=True,
                 text=True,
@@ -377,6 +381,69 @@ class PolicyRestrictionTest(unittest.TestCase):
     def test_add_user_dump_is_not_factory_reset(self) -> None:
         proc = self._run(_POLICY_ANDROID15_GLOBAL_TRUE, _USER_EFFECTIVE, "no_factory_reset")
         self._assert_not_applied(proc, "no_factory_reset")
+
+    def test_usage_error_exits_3_and_empty_dumpsys_stays_2(self) -> None:
+        usage = subprocess.run(CLI, check=False, capture_output=True, text=True)
+        self.assertEqual(usage.returncode, 3, usage.stderr)
+        self.assertNotIn("empty or unrecognised", usage.stderr)
+        self.assertNotIn("is not applied", usage.stderr)
+        self.assertIn("usage:", usage.stderr.lower())
+        empty = self._run("", "")
+        self.assertEqual(empty.returncode, 2, empty.stderr)
+        self.assertIn("dumpsys input is empty or unrecognised", empty.stderr)
+        self.assertNotIn("usage:", empty.stderr.lower())
+
+    def test_api35_dump_timeout_is_not_applied_or_cleared(self) -> None:
+        applied = self._run(_POLICY_ENGINE_ADD_USER, _USER_EFFECTIVE, api_level=35)
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        self.assertIn("no_add_user", applied.stdout)
+        timed_policy = (
+            _POLICY_ENGINE_ADD_USER
+            + "\n*** SERVICE 'device_policy' DUMP TIMEOUT (10000ms) EXPIRED\n"
+        )
+        timed = self._run(timed_policy, _USER_EFFECTIVE, api_level=35)
+        self.assertEqual(timed.returncode, 2, timed.stderr)
+        self.assertIn("*** SERVICE ... DUMP TIMEOUT", timed.stderr)
+        self.assertNotIn("is not applied", timed.stderr)
+        self.assertEqual(timed.stdout, "")
+
+    def test_api35_names_each_missing_marker(self) -> None:
+        recognised = self._run(
+            _POLICY_FACTORY_FALSE, _USER_FACTORY_FALSE, "no_factory_reset", api_level=35
+        )
+        self._assert_not_applied(recognised, "no_factory_reset")
+
+        no_engine = "\n".join(
+            line for line in _POLICY_FACTORY_FALSE.splitlines() if "DevicePolicyEngine" not in line
+        )
+        missing_engine = self._run(no_engine, _USER_FACTORY_FALSE, "no_factory_reset", api_level=35)
+        self.assertEqual(missing_engine.returncode, 2, missing_engine.stderr)
+        self.assertIn("missing DevicePolicyEngine section", missing_engine.stderr)
+        self.assertNotIn("is not applied", missing_engine.stderr)
+
+        no_userinfo = _USER_FACTORY_FALSE.replace("UserInfo{0:Owner:c13} ", "Owner ")
+        missing_user = self._run(
+            _POLICY_FACTORY_FALSE, no_userinfo, "no_factory_reset", api_level=35
+        )
+        self.assertEqual(missing_user.returncode, 2, missing_user.stderr)
+        self.assertIn("missing UserInfo{", missing_user.stderr)
+        self.assertNotIn("is not applied", missing_user.stderr)
+
+        no_header = "\n".join(
+            line
+            for line in _USER_FACTORY_FALSE.splitlines()
+            if not line.strip().endswith("restrictions:")
+            and not line.strip().endswith("Restrictions:")
+        )
+        self.assertIn("UserInfo{", no_header)
+        self.assertNotIn("Effective restrictions:", no_header)
+        missing_header = self._run(
+            _POLICY_FACTORY_FALSE, no_header, "no_factory_reset", api_level=35
+        )
+        self.assertEqual(missing_header.returncode, 2, missing_header.stderr)
+        self.assertIn("missing restriction header", missing_header.stderr)
+        self.assertNotIn("is not applied", missing_header.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
