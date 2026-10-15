@@ -16,9 +16,10 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = ROOT / "scripts" / "emulator-policy-disallow-add-user.sh"
+SCRIPT = ROOT / "scripts" / "emulator-policy-restriction.sh"
+LIB = ROOT / "scripts" / "lib" / "clear-leg.sh"
 
-# Recognised user header, but the device_policy file stops before the engine.
+# Recognised user header, but the device_policy file has no section line.
 _CUTOFF_POLICY = "DUMP OF SERVICE device_policy:\n"
 _CUTOFF_USER = """\
 Users:
@@ -29,20 +30,31 @@ Users:
       no_config_wifi
 """
 
-# A real clear: the engine section is present and the token is false.
-_CLEARED_POLICY = """\
-DevicePolicyEngine:
-  Global Policies:
-    UserRestrictionPolicyKey userRestriction_no_factory_reset
-      Resolved Policy (MostRestrictive):
-        BooleanPolicyValue { mValue= false }
-"""
+# Run 38441669873 false/device_policy.txt. Anchored Local Policies and
+# Global Policies lines. no_factory_reset is absent, so the clear is real.
+_CLEARED_POLICY = (
+    ROOT / "server" / "tests" / "fixtures" / "api35-atd-false-device_policy.txt"
+).read_text(encoding="utf-8")
 _CLEARED_USER = """\
 Users:
   UserInfo{0:Owner:c13} serialNo=0 isPrimary=true
     Effective restrictions:
       no_config_wifi
 """
+_SECTION_MISS = (
+    "FAIL: step clear: after-false device_policy dump lacks a "
+    "Local Policies or Global Policies section"
+)
+
+
+def _section_mention_only(text: str) -> str:
+    lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        if line.strip() in {"Local Policies:", "Global Policies:"}:
+            lines.append("note: see Local Policies: and Global Policies: below\n")
+        else:
+            lines.append(line)
+    return "".join(lines)
 
 
 class ClearLegStubTest(unittest.TestCase):
@@ -54,8 +66,15 @@ class ClearLegStubTest(unittest.TestCase):
             policy_path.write_text(policy, encoding="utf-8")
             user_path.write_text(user, encoding="utf-8")
             env = os.environ.copy()
-            env.pop("DISALLOW_ADD_USER", None)
-            env.pop("DISALLOW_FACTORY_RESET", None)
+            for key in (
+                "DISALLOW_ADD_USER",
+                "DISALLOW_FACTORY_RESET",
+                "SERIAL",
+                "ANDROID_SERIAL",
+                "API_LEVEL",
+                "CLEAR_LEG_STUB",
+            ):
+                env.pop(key, None)
             env.update(
                 {
                     "CLEAR_LEG_STUB": "1",
@@ -85,10 +104,19 @@ class ClearLegStubTest(unittest.TestCase):
     def test_cutoff_dumpsys_fails_the_clear_leg(self) -> None:
         proc = self._run(_CUTOFF_POLICY, _CUTOFF_USER)
         self.assertEqual(proc.returncode, 1, proc.stderr)
-        self.assertIn(
-            "FAIL: step clear: after-false device_policy dump lacks DevicePolicyEngine, UserRestrictionPolicyKey, or Device Owner",
-            proc.stderr,
-        )
+        self.assertIn(_SECTION_MISS, proc.stderr)
+        self.assertNotIn("PASS:", proc.stdout)
+        self.assertNotIn("PASS:", proc.stderr)
+
+    def test_anchored_section_rejects_a_midline_mention(self) -> None:
+        # The rest of the real false dump is a clear. A substring grep for
+        # the header names would accept the note line and this test goes red.
+        mention = _section_mention_only(_CLEARED_POLICY)
+        self.assertIn("Local Policies:", mention)
+        self.assertIn("Global Policies:", mention)
+        proc = self._run(mention, _CLEARED_USER)
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn(_SECTION_MISS, proc.stderr)
         self.assertNotIn("PASS:", proc.stdout)
         self.assertNotIn("PASS:", proc.stderr)
 
@@ -97,6 +125,82 @@ class ClearLegStubTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("PASS: clear leg accepted no_factory_reset", proc.stdout)
         self.assertIn("restriction no_factory_reset is not applied", proc.stdout)
+
+    def test_dump_timeout_fails_the_clear_leg(self) -> None:
+        timed = _CLEARED_POLICY + "*** SERVICE 'device_policy' DUMP TIMEOUT (10000ms) EXPIRED\n"
+        proc = self._run(timed, _CLEARED_USER)
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("FAIL: step clear: dumpsys contains *** SERVICE ... DUMP TIMEOUT", proc.stderr)
+        self.assertNotIn("PASS:", proc.stdout)
+        self.assertNotIn("PASS:", proc.stderr)
+        self.assertNotIn("is not applied", proc.stdout)
+
+    def test_missing_userinfo_fails_the_clear_leg(self) -> None:
+        user = _CLEARED_USER.replace("UserInfo{0:Owner:c13} ", "Owner ")
+        self.assertNotIn("UserInfo{", user)
+        proc = self._run(_CLEARED_POLICY, user)
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("FAIL: step clear: after-false dumpsys user lacks UserInfo{", proc.stderr)
+        self.assertNotIn("PASS:", proc.stdout)
+
+    def test_missing_restriction_header_fails_the_clear_leg(self) -> None:
+        user = "Users:\n  UserInfo{0:Owner:c13} serialNo=0\n    Restrictions:\n      none\n"
+        proc = self._run(_CLEARED_POLICY, user)
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn(
+            "FAIL: step clear: after-false dumpsys user lacks a restriction header",
+            proc.stderr,
+        )
+        self.assertNotIn("PASS:", proc.stdout)
+
+    def test_stub_refuses_when_serial_is_configured(self) -> None:
+        accepted = self._run(_CLEARED_POLICY, _CLEARED_USER)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        for key, value in (("SERIAL", "emulator-5554"), ("ANDROID_SERIAL", "emulator-5554")):
+            proc = self._run(_CLEARED_POLICY, _CLEARED_USER, {key: value})
+            self.assertEqual(proc.returncode, 1, proc.stderr)
+            self.assertIn("FAIL: CLEAR_LEG_STUB refused because adb/SERIAL is configured", proc.stderr)
+            self.assertNotIn("PASS:", proc.stdout)
+            self.assertNotIn("set-device-owner", proc.stdout)
+            self.assertNotIn("set-device-owner", proc.stderr)
+
+    def test_api33_device_owner_marker_is_not_enough_on_api35(self) -> None:
+        policy = "Device Owner:\n  admin=net.themark.grapheneosmdm\n"
+        legacy = self._run(policy, _CLEARED_USER, {"API_LEVEL": "33"})
+        self.assertEqual(legacy.returncode, 0, legacy.stderr)
+        self.assertIn("PASS: clear leg accepted no_factory_reset", legacy.stdout)
+        strict = self._run(policy, _CLEARED_USER, {"API_LEVEL": "35"})
+        self.assertEqual(strict.returncode, 1, strict.stderr)
+        self.assertIn(_SECTION_MISS, strict.stderr)
+        self.assertNotIn("PASS:", strict.stdout)
+
+    def test_restriction_step_names_a_dump_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy = root / "device_policy.txt"
+            user = root / "dumpsys_user.txt"
+            policy.write_text(
+                _CLEARED_POLICY + "*** SERVICE 'device_policy' DUMP TIMEOUT (10000ms) EXPIRED\n",
+                encoding="utf-8",
+            )
+            user.write_text(_CLEARED_USER, encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    "bash",
+                    "-c",
+                    'set -euo pipefail; source "$1"; require_api_dumpsys restriction "$2" "$3" 35; echo UNEXPECTED',
+                    "bash",
+                    str(LIB),
+                    str(policy),
+                    str(user),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn("FAIL: step restriction: dumpsys contains *** SERVICE ... DUMP TIMEOUT", proc.stderr)
+        self.assertNotIn("UNEXPECTED", proc.stdout)
 
     def test_other_mode_env_is_rejected(self) -> None:
         proc = self._run(

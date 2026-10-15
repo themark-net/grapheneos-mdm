@@ -16,11 +16,12 @@
 # disallowFactoryReset (token no_factory_reset), then its post-run state:
 #   factory-absent           -> must exit 1
 #   factory-false            -> must exit 1
-#   factory-true-then-false  -> must exit 0 (clears only when the
-#                               after-false device_policy dump has a
-#                               DevicePolicyEngine / UserRestrictionPolicyKey
-#                               / Device Owner marker and policy_restriction.py
-#                               exits 1 with "restriction no_factory_reset is not applied")
+#   factory-true-then-false  -> must exit 0 (clears only when API 34+ sees an
+#                               anchored Local Policies: or Global Policies:
+#                               line, UserInfo{, and a restriction header, no
+#                               DUMP TIMEOUT line, and policy_restriction.py
+#                               exits 1 with "restriction no_factory_reset is
+#                               not applied")
 #   factory-true             -> must exit 0
 #   post-run-factory-reset   -> device owner and no_factory_reset applied
 #
@@ -50,7 +51,9 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SCRIPT="$ROOT/scripts/emulator-policy-disallow-add-user.sh"
+SCRIPT="${OPERATE_SCRIPT:-$ROOT/scripts/emulator-policy-restriction.sh}"
+# shellcheck source=scripts/lib/cert-guard.sh
+source "$ROOT/scripts/lib/cert-guard.sh"
 LOGDIR="${LOGDIR:-/tmp/mdm-ci}"
 CERTS_ROOT="${CERTS_ROOT:-/tmp/mdm-certs}"
 PKG="net.themark.grapheneosmdm"
@@ -234,13 +237,42 @@ assert_post_run() {
     note "ASSERT FAIL: ${tag} device owner is not $PKG"
     FAILED=1
   fi
-  if python3 "$ROOT/server/policy_restriction.py" --restriction "$token" \
+  local api
+  api="$(adb -s "$SERIAL" shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r' || true)"
+  case "$api" in
+    ''|*[!0-9]*)
+      note "ASSERT FAIL: ${tag} ro.build.version.sdk is not an integer (${api})"
+      FAILED=1
+      return 0
+      ;;
+  esac
+  local rc errexit=0
+  # The wrapper starts with errexit off so an expected leg failure is
+  # asserted instead of aborting the script. set -e here would leave it
+  # on and a later factory-absent exit would skip the remaining legs,
+  # the cert guard, and RESULT.
+  case $- in
+    *e*) errexit=1 ;;
+  esac
+  set +e
+  python3 "$ROOT/server/policy_restriction.py" --restriction "$token" \
+    --api-level "$api" \
     --device-policy "$post/dumpsys_device_policy.txt" \
-    --user "$post/dumpsys_user.txt" >"$post/restriction.txt" 2>&1; then
-    cat "$post/restriction.txt"
+    --user "$post/dumpsys_user.txt" >"$post/restriction.txt" 2>&1
+  rc=$?
+  if [ "$errexit" -eq 1 ]; then
+    set -e
+  fi
+  cat "$post/restriction.txt"
+  if [ "$rc" -eq 0 ]; then
     note "ASSERT OK: ${tag} ${token} is applied"
+  elif [ "$rc" -eq 2 ]; then
+    note "ASSERT FAIL: ${tag} dumpsys empty, unrecognised, timed out, or missing an API 34 marker (exit=2)"
+    FAILED=1
+  elif [ "$rc" -eq 3 ]; then
+    note "ASSERT FAIL: ${tag} policy_restriction.py usage error (exit=3)"
+    FAILED=1
   else
-    cat "$post/restriction.txt"
     note "ASSERT FAIL: ${tag} ${token} is not applied"
     FAILED=1
   fi
@@ -263,14 +295,11 @@ run_leg factory-true disallowFactoryReset true 0 "PASS: no_factory_reset applied
 assert_post_run post-run-factory-reset no_factory_reset
 
 echo "== cert material must not sit under the uploaded log dir =="
-CERT_HITS="$(find "$LOGDIR" -type f \( \
-  -name '*.pem' -o -name '*.p12' -o -name '*.key' -o -name '*.crt' \
-  -o -name '*.der' -o -name '*.cer' -o -name '*.pfx' \
-  -o -name '*.jks' -o -name '*.keystore' -o -name '*.csr' -o -name '*.bks' \
-\) -print || true)"
-CERT_DIRS="$(find "$LOGDIR" -type d -name certs -print || true)"
-if [ -n "$CERT_HITS" ] || [ -n "$CERT_DIRS" ]; then
-  printf '%s\n' "$CERT_HITS" "$CERT_DIRS"
+# *.bks is matched in scripts/lib/cert-guard.sh. The upload exclusion for
+# that suffix is the line !/tmp/mdm-ci/**/*.bks in emulator-policy.yml.
+CERT_HITS="$(cert_guard_hits "$LOGDIR")"
+if [ -n "$CERT_HITS" ]; then
+  printf '%s\n' "$CERT_HITS"
   note "ASSERT FAIL: cert or key path under $LOGDIR"
   FAILED=1
 else
@@ -289,7 +318,7 @@ else
 fi
 
 echo "== summary =="
-cat "$SUMMARY"
+echo "summary file: $SUMMARY"
 if [ "$FAILED" -ne 0 ]; then
   echo "RESULT: FAIL"
   exit 1

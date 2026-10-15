@@ -8,7 +8,7 @@ The image is the AOSP ATD Android 15 emulator (`system-images;android-35;aosp_at
 
 - [.github/workflows/emulator-policy.yml](../../.github/workflows/emulator-policy.yml) — job `AOSP ATD emulator policy (disallowAddUser)` on `ubuntu-latest`. Enables `/dev/kvm` with a udev rule, installs Temurin 17, Gradle 8.9 and Python 3.12 with setup actions, builds the test-only debug APK, boots the emulator with `reactivecircus/android-emulator-runner` v2.38.0 (pinned to `a421e43855164a8197daf9d8d40fe71c6996bb0d`), runs the CI wrapper, and uploads `/tmp/mdm-ci` as `emulator-policy-logs` with `if: always()` (lab certs excluded). Path-filtered `pull_request` and `push` to `main`, plus `workflow_dispatch`. No cron. Concurrency cancel-in-progress. Timeout 45 minutes.
 - [scripts/ci-emulator-policy.sh](../../scripts/ci-emulator-policy.sh) — runs the operate script four times and asserts each exit code (`absent` 1, `false` 1, `true-then-false` 0, `true` 0) and the expected FAIL/PASS line. A negative leg that prints `PASS:` fails. Then it asserts the post-run state (device owner, `no_add_user` applied). Prints `ASSERT OK:` / `ASSERT FAIL:` lines and `RESULT: PASS|FAIL`.
-- [scripts/emulator-policy-disallow-add-user.sh](../../scripts/emulator-policy-disallow-add-user.sh):
+- [scripts/emulator-policy-restriction.sh](../../scripts/emulator-policy-restriction.sh):
   - `UI_PORT` is used everywhere (listener check, error text, PASS line). Default 8787. `LAB_URL` follows `PORT` (default 8443).
   - New mode `DISALLOW_ADD_USER=true-then-false`: apply true, then a per-device override `{"disallowAddUser": false}` through `fleet_store.py set-desired`, a second broadcast with no owner reset and no `pm clear`, and `no_add_user` must be gone.
   - Header lists the env overrides. nimo defaults (`emulator-5574`, adb server 5038, AVD `mdm36`) are unchanged.
@@ -23,8 +23,8 @@ On GitHub: any PR that touches the filtered paths, or Actions → "Emulator poli
 On nimo (unchanged defaults):
 
 ```bash
-GRADLE_BIN=/tmp/gradle-8.9/bin/gradle scripts/emulator-policy-disallow-add-user.sh
-DISALLOW_ADD_USER=true-then-false GRADLE_BIN=/tmp/gradle-8.9/bin/gradle scripts/emulator-policy-disallow-add-user.sh
+GRADLE_BIN=/tmp/gradle-8.9/bin/gradle scripts/emulator-policy-restriction.sh
+DISALLOW_ADD_USER=true-then-false GRADLE_BIN=/tmp/gradle-8.9/bin/gradle scripts/emulator-policy-restriction.sh
 ```
 
 Local checks, no device:
@@ -32,7 +32,7 @@ Local checks, no device:
 ```bash
 python3 -m unittest discover -s server/tests -v
 python3 -m unittest discover -s protocol/tests -v
-bash -n scripts/emulator-policy-disallow-add-user.sh scripts/ci-emulator-policy.sh
+bash -n scripts/emulator-policy-restriction.sh scripts/ci-emulator-policy.sh
 actionlint .github/workflows/*.yml
 ```
 

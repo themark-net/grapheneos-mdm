@@ -4,7 +4,7 @@ Issue #45. Branch `build/p4-disallow-add-user`. Implemented with Grok Build head
 
 ## What shipped
 
-- [scripts/emulator-policy-disallow-add-user.sh](../../scripts/emulator-policy-disallow-add-user.sh) — one AOSP ATD run. Enroll with `dpm set-device-owner`, one lab check-in, then `no_add_user`, then the operator list on 127.0.0.1:8787.
+- [scripts/emulator-policy-restriction.sh](../../scripts/emulator-policy-restriction.sh) — one AOSP ATD run. Enroll with `dpm set-device-owner`, one lab check-in, then `no_add_user`, then the operator list on 127.0.0.1:8787.
 - [server/policy_restriction.py](../../server/policy_restriction.py) — reads `dumpsys device_policy` and `dumpsys user`. Exit 0 prints the matching lines when `no_add_user` is applied. Exit 1 when it is not.
 - [server/tests/test_policy_restriction.py](../../server/tests/test_policy_restriction.py) — the parser cases that a substring match gets wrong. No emulator.
 
@@ -23,9 +23,9 @@ The desired state for the run is `schemaVersion` 1, `requiredPackages` empty, co
 From this repo, with the user-space SDK (AVD `mdm36`, serial `emulator-5574`, `ANDROID_ADB_SERVER_PORT=5038`):
 
 ```bash
-GRADLE_BIN=/path/to/gradle-8.9/bin/gradle scripts/emulator-policy-disallow-add-user.sh
-DISALLOW_ADD_USER=false GRADLE_BIN=/path/to/gradle-8.9/bin/gradle scripts/emulator-policy-disallow-add-user.sh
-DISALLOW_ADD_USER=absent GRADLE_BIN=/path/to/gradle-8.9/bin/gradle scripts/emulator-policy-disallow-add-user.sh
+GRADLE_BIN=/path/to/gradle-8.9/bin/gradle scripts/emulator-policy-restriction.sh
+DISALLOW_ADD_USER=false GRADLE_BIN=/path/to/gradle-8.9/bin/gradle scripts/emulator-policy-restriction.sh
+DISALLOW_ADD_USER=absent GRADLE_BIN=/path/to/gradle-8.9/bin/gradle scripts/emulator-policy-restriction.sh
 ```
 
 `OUT` defaults to `/tmp/mdm-phase4-policy`. The script writes a new `fleet.sqlite` there. Guest temp files are `mdm-phase4-*`. Procedure and the bench log are in [docs/EMULATOR.md](../EMULATOR.md).
@@ -34,7 +34,7 @@ Parser check, no device:
 
 ```bash
 python3 -m unittest discover -s server/tests -v
-bash -n scripts/emulator-policy-disallow-add-user.sh
+bash -n scripts/emulator-policy-restriction.sh
 ```
 
 ## Failure modes and recovery

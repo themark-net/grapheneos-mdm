@@ -1,0 +1,210 @@
+Current Device Policy Manager state:
+  Immutable state:
+    mHasFeature=true
+    mIsWatch=false
+    mIsAutomotive=false
+    mHasTelephonyFeature=true
+    mSafetyChecker=null
+  Device Owner: 
+    admin=ComponentInfo{net.themark.grapheneosmdm/net.themark.grapheneosmdm.receiver.DeviceAdminReceiver}
+    package=net.themark.grapheneosmdm
+    isOrganizationOwnedDevice=true
+    User ID: 0
+  
+  
+  
+  Enabled Device Admins (User 0, provisioningState: 3):
+    net.themark.grapheneosmdm/.receiver.DeviceAdminReceiver:
+      uid=10138
+      testOnlyAdmin=true
+      policies:
+        wipe-data
+        reset-password
+        limit-password
+        watch-login
+        force-lock
+        expire-password
+        encrypted-storage
+        disable-camera
+        disable-keyguard-features
+      passwordQuality=0x0
+      minimumPasswordLength=0
+      passwordHistoryLength=0
+      minimumPasswordUpperCase=0
+      minimumPasswordLowerCase=0
+      minimumPasswordLetters=1
+      minimumPasswordNumeric=1
+      minimumPasswordSymbols=1
+      minimumPasswordNonLetter=0
+      maximumTimeToUnlock=0
+      strongAuthUnlockTimeout=0
+      maximumFailedPasswordsForWipe=0
+      specifiesGlobalProxy=false
+      passwordExpirationTimeout=0
+      passwordExpirationDate=0
+      encryptionRequested=false
+      disableCallerId=false
+      disableContactsSearch=false
+      disableBluetoothContactSharing=true
+      forceEphemeralUsers=false
+      isNetworkLoggingEnabled=false
+      disabledKeyguardFeatures=0
+      crossProfileWidgetProviders=null
+      organizationColor=-16746133
+      defaultEnabledRestrictionsAlreadySet={}
+      managedProfileCallerIdPolicy:
+      managedProfileContactsPolicy:
+      credentialManagerPolicy:
+      isParent=false
+      mCrossProfileCalendarPackages=[]
+      mCrossProfilePackages=[]
+      mSuspendPersonalApps=false
+      mProfileMaximumTimeOffMillis=0
+      mProfileOffDeadline=0
+      mAlwaysOnVpnPackage=null
+      mAlwaysOnVpnLockdown=false
+      mCommonCriteriaMode=false
+      mPasswordComplexity=0
+      mNearbyNotificationStreamingPolicy=3
+      mNearbyAppStreamingPolicy=3
+      mAdminCanGrantSensorsPermissions=true
+      mWifiMinimumSecurityLevel=0
+      mPreferentialNetworkServiceConfigs:
+        networkId=0
+        isEnabled=false
+        allowFallbackToDefaultConnection=true
+        blockNonMatchingNetworks=false
+        includedUids=[]
+        excludedUids=[]
+      mtePolicy=0
+      accountTypesWithManagementDisabled={}
+      mDialerPackage=null
+      mSmsPackage=null
+  
+    mPasswordOwner=-1
+    mPasswordTokenHandle=0
+    mAppsSuspended=false
+    mUserSetupComplete=true
+    mAffiliationIds={}
+    mNewUserDisclaimer=null
+  
+  
+  Constants:
+    DAS_DIED_SERVICE_RECONNECT_BACKOFF_SEC: 3600
+    DAS_DIED_SERVICE_RECONNECT_BACKOFF_INCREASE: 2.0
+    DAS_DIED_SERVICE_RECONNECT_MAX_BACKOFF_SEC: 86400
+    DAS_DIED_SERVICE_STABLE_CONNECTION_THRESHOLD_SEC: 120
+  
+  Stats:
+    LockGuard.guard(): count=992, total=44.0ms, avg=0.044ms, max calls/s=109 max dur/s=42.7ms max time=42.6ms
+  
+  Local Policies: 
+    User 0:
+      UserRestrictionPolicyKey userRestriction_no_add_user
+        Per-admin Policy:
+          null
+        Resolved Policy (MostRestrictive):
+          null
+      
+  
+  Global Policies: 
+    UserRestrictionPolicyKey userRestriction_no_add_user
+      Per-admin Policy:
+        EnforcingAdmin { mPackageName= net.themark.grapheneosmdm, mComponentName= ComponentInfo{net.themark.grapheneosmdm/net.themark.grapheneosmdm.receiver.DeviceAdminReceiver}, mAuthorities= [enterprise], mUserId= 0, mIsRoleAuthority= false }
+          BooleanPolicyValue { mValue= true }
+      Resolved Policy (MostRestrictive):
+        BooleanPolicyValue { mValue= true }
+    
+  
+  Default admin policy size limit: -1
+  Current admin policy size limit: -1
+  Admin Policies size: 
+  User 0:
+    Admin : EnforcingAdmin { mPackageName= net.themark.grapheneosmdm, mComponentName= ComponentInfo{net.themark.grapheneosmdm/net.themark.grapheneosmdm.receiver.DeviceAdminReceiver}, mAuthorities= [enterprise], mUserId= 0, mIsRoleAuthority= false } : 84
+
+Encryption Status: per-user
+Logout user: -10000
+
+no pending user created callback tokens
+
+Device policy cache:
+  Screen capture disallowed users: []
+  Password quality: {}
+  Permission policy: {}
+  Content protection policy: {}
+  Admin can grant sensors permission: true
+  Shortcuts overrides: {}
+
+Device state cache:
+  Device provisioned: true
+  Device Owner Type: 0
+  Has PO:
+
+PersonalAppsSuspensionHelper
+  critical packages: empty
+  launcher packages: 2 apps
+    0: com.android.fakesystemapp
+    1: com.android.fakesystemapp
+  accessibility services: empty
+  input method packages: 1 app
+    0: com.android.inputmethod.latin
+  SMS package: com.android.fakesystemapp
+  Settings package: null
+  Packages subject to suspension: 8 apps
+    0: com.android.quicksearchbox
+    1: com.android.contacts
+    2: com.android.camera2
+    3: com.android.stk
+    4: com.android.calendar
+    5: com.android.gallery3d
+    6: org.chromium.webview_shell
+    7: com.android.deskclock
+Subscription changed listener : null
+DPM global setting ALLOW_WORK_PROFILE_TELEPHONY_FOR_NON_DPM_ROLE_HOLDERS : null
+OverlayPackagesProvider
+  required_apps_managed_device: 10 apps
+    0: com.android.documentsui
+    1: com.android.providers.downloads
+    2: com.android.providers.downloads.ui
+    3: com.android.contacts
+    4: com.android.stk
+    5: com.android.webview
+    6: com.android.cellbroadcastreceiver
+    7: com.android.dialer
+    8: com.android.settings
+    9: com.android.systemui
+  required_apps_managed_user: 9 apps
+    0: com.android.documentsui
+    1: com.android.providers.downloads
+    2: com.android.providers.downloads.ui
+    3: com.android.contacts
+    4: com.android.stk
+    5: com.android.webview
+    6: com.android.dialer
+    7: com.android.settings
+    8: com.android.systemui
+  required_apps_managed_profile: 7 apps
+    0: com.android.documentsui
+    1: com.android.providers.downloads
+    2: com.android.providers.downloads.ui
+    3: com.android.contacts
+    4: com.android.webview
+    5: com.android.settings
+    6: com.android.systemui
+  disallowed_apps_managed_device: empty
+  disallowed_apps_managed_user: empty
+  disallowed_apps_managed_device: empty
+  vendor_required_apps_managed_device: empty
+  vendor_required_apps_managed_user: empty
+  vendor_required_apps_managed_profile: empty
+  vendor_disallowed_apps_managed_user: empty
+  vendor_disallowed_apps_managed_device: empty
+  vendor_disallowed_apps_managed_profile: empty
+
+Other overlayable app resources
+  cross_profile_apps: empty
+  vendor_cross_profile_apps: empty
+  config_packagesExemptFromSuspension: empty
+  policy_exempt_apps: empty
+  vendor_policy_exempt_apps: empty
+

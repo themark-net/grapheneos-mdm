@@ -2,15 +2,15 @@
 
 Continuation note for the next harness. Read [docs/ROADMAP.md](ROADMAP.md) for the next slice. Issue **#8** stays closed. Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner. That gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
 
-Updated 2026-10-12 on `build/p6-factory-reset` (Phase 6, issue #49). `main` is at `e43fc37` (`e43fc37fab1959cfa59764c6fb5abb6811334976`, PR #48, Phase 5). This file describes what the Phase 6 merge lands. Read `git rev-parse HEAD` on `main` for the merged tip.
+Updated 2026-10-13 on `build/p7-ci-hardening` (Phase 7, issue #51). `main` is at `0c54704` (`0c54704e5a4218cbf09d752599edb3b0e19e1f5e`, Phase 6, PR #50). This file describes the Phase 7 branch. It is not merged. Pull request #52 is open (https://github.com/themark-net/grapheneos-mdm/pull/52).
 
 ## 1. Tip
 
 | | |
 | --- | --- |
-| Branch before merge | `main` at `e43fc37` (Phase 5, PR #48) |
-| This change | Phase 6: `policyFlags.disallowFactoryReset` on the same GitHub-hosted KVM job (issue #49), plus the #48 artifact hygiene |
-| Earlier tips | `4784a79` Phase 3 (#44), `ed62c4a` docs handoff (#43) |
+| Branch before this change | `main` at `0c54704` (Phase 6, PR #50) |
+| This change | Phase 7: CI hardening of the emulator-policy job (issue #51). Not merged. Pull request #52 is open. |
+| Earlier tips | `e43fc37` Phase 5 (PR #48), `4784a79` Phase 3 (#44), `ed62c4a` docs handoff (#43) |
 | Ancestor feature | `b5fd229` (`b5fd229f86326b7c428365c8f49b6fb218a6d002`), Android emulator device-owner (#38) |
 
 `49a16c8` is PR #34 (localhost fleet operator page). `ed62c4a` is PR #43 (this handoff's previous tip plus the Feature GO roadmap).
@@ -77,7 +77,7 @@ The success line was `PASS: second check-in attestationStatus=chain_invalid veri
 
 ### Emulator policy on the operator page — Phase 4
 
-Issue #45. Branch `build/p4-disallow-add-user`. Script: [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). Procedure: [docs/EMULATOR.md](EMULATOR.md). Handoff: [docs/ops/HANDOFF-p4-disallow-add-user-2026-10-09.md](ops/HANDOFF-p4-disallow-add-user-2026-10-09.md).
+Issue #45. Branch `build/p4-disallow-add-user`. Script: [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). Procedure: [docs/EMULATOR.md](EMULATOR.md). Handoff: [docs/ops/HANDOFF-p4-disallow-add-user-2026-10-09.md](ops/HANDOFF-p4-disallow-add-user-2026-10-09.md).
 
 One check-in. `DISALLOW_ADD_USER=true` (the default) sets `policyFlags.disallowAddUser`. The script then requires applied `no_add_user` and the device id on `ui_server.py` at 127.0.0.1:8787. `false` and `absent` are expected to fail at the restriction step. Bench 2026-10-09 on nimo: `absent` and `false` exited 1 with `FAIL: restriction no_add_user not applied`; `true` exited 0, `dumpsys user` showed `no_add_user` under `Effective restrictions:` and `dumpsys device_policy` showed `UserRestrictionPolicyKey userRestriction_no_add_user` resolved `true`, and `GET /api/devices` on 127.0.0.1:8787 listed `deviceId a7fdb4548155d650`. Full log in [docs/EMULATOR.md](EMULATOR.md#bench-log-2026-10-09). The row shows `attestationStatus none` (one check-in, new sqlite). This phase does not assert attestation. The image is an AOSP ATD emulator. Merged as PR #46 (squash `51c6c3b`).
 
@@ -93,9 +93,19 @@ Issue #47. Branch `build/p5-gha-kvm`, based on `main` at `51c6c3b` (PR #46 merge
 
 Issue #49. Branch `build/p6-factory-reset`, based on `main` at `e43fc37` (PR #48 merged). Handoff: [docs/ops/HANDOFF-p6-factory-reset-2026-10-12.md](ops/HANDOFF-p6-factory-reset-2026-10-12.md). Decisions: [docs/ops/AUTONOMOUS-DECISIONS-2026-10-12.md](ops/AUTONOMOUS-DECISIONS-2026-10-12.md).
 
-The same [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml) job runs on `ubuntu-latest` (no self-hosted runner). [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh) keeps the four disallowAddUser legs and their post-run check, then runs [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh) with `RESTRICTION=disallowFactoryReset`: `absent` and `false` exit 1, `true-then-false` and `true` exit 0. The dumpsys token is `no_factory_reset`. The clear leg requires a non-empty after-false `device_policy` dump with `DevicePolicyEngine`, `UserRestrictionPolicyKey`, or a Device Owner line, and `policy_restriction.py` exit 1 with `restriction no_factory_reset is not applied`. Exit 2 is a failed clear. The script does not factory-reset or wipe. The upload excludes `fleet.sqlite*` and the certificate suffixes `.pem`, `.key`, `.p12`, `.crt`, `.der`, `.cer`, `.pfx`, `.jks`, `.keystore`, `.csr`, `.bks`. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
+The same [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml) job runs on `ubuntu-latest` (no self-hosted runner). [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh) keeps the four disallowAddUser legs and their post-run check, then runs [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh) with `RESTRICTION=disallowFactoryReset`: `absent` and `false` exit 1, `true-then-false` and `true` exit 0. The dumpsys token is `no_factory_reset`. The clear leg requires a non-empty after-false `device_policy` dump with `DevicePolicyEngine`, `UserRestrictionPolicyKey`, or a Device Owner line, and `policy_restriction.py` exit 1 with `restriction no_factory_reset is not applied`. Exit 2 is a failed clear. The script does not factory-reset or wipe. The upload excludes `fleet.sqlite*` and the certificate suffixes `.pem`, `.key`, `.p12`, `.crt`, `.der`, `.cer`, `.pfx`, `.jks`, `.keystore`, `.csr`, `.bks`. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
 
 `ef5b380` (`ef5b38089fcab96c616547adc18f58b879e66e62`) is the code SHA. Green emulator run on that SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/38287586817. Protocol schemas and Android unit tests on the same SHA: https://github.com/themark-net/grapheneos-mdm/actions/runs/38287586836. `pull_request` path filters match the whole PR diff, so a docs-only head still re-runs the emulator job. That later URL is not recorded in a follow-up commit.
+
+### CI hardening — Phase 7
+
+Issue #51. Branch `build/p7-ci-hardening`, based on `main` at `0c54704`. Handoff: [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md). Decisions: [docs/ops/AUTONOMOUS-DECISIONS-2026-10-13.md](ops/AUTONOMOUS-DECISIONS-2026-10-13.md). Not Feature GO. Not merged. Pull request #52 is open (https://github.com/themark-net/grapheneos-mdm/pull/52).
+
+The operate script is [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). On API 34 and above, the restriction step and the clear leg require an anchored `Local Policies:` or `Global Policies:` line (a mid-line mention does not count; API 35 ATD dumps have no `DevicePolicyEngine` line), `UserInfo{`, and a restriction header, and they fail on `*** SERVICE ... DUMP TIMEOUT`. [server/policy_restriction.py](../server/policy_restriction.py) exits 3 on an argparse usage error and 2 on empty, unrecognised, timeout, or a missing API 34 marker. `CLEAR_LEG_STUB` lives in [scripts/lib/clear-leg.sh](../scripts/lib/clear-leg.sh) and refuses a caller-supplied `SERIAL` or `ANDROID_SERIAL`. The BouncyCastle exclusion is the line `!/tmp/mdm-ci/**/*.bks` in [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml), and `-name '*.bks'` in [scripts/lib/cert-guard.sh](../scripts/lib/cert-guard.sh). JavaScript actions are pinned to Node 24 releases. `PolicyRestrictionTest` compares pairs as a map. ASSERT lines are printed once.
+
+Cursor Approval is not green. PR #50 head `c9e646b` concluded `neutral` (`Approval Agent run encountered an error`, run `bc-9a8d6e3e`). Main `0c54704` has no Cursor Approval check. Pull request #52 is open. On `e852c6f` the Cursor Approval check concluded `neutral`. The waiver on issue #51 stays open. This commit does not close it.
+
+emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. The repair on this branch has not had a green emulator-policy run. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
 
 ### Earlier squash merges
 
@@ -129,7 +139,7 @@ Issue #8 stays closed. The wizard gap is upstream SetupWizard2 PR #40, unchanged
 
 Founder draft PR **#42** (`founder-build-babysit/2026-10-05`) is not the next slice. Leave it untouched.
 
-Phase 5 (issue #47) runs the Phase 4 operate script on a GitHub-hosted KVM runner; see the Phase 5 section above. Phase 6 (issue #49) gates `disallowFactoryReset` on that same job. Phase 4, Phase 5, and Phase 6 are not Feature GO. The next slice after Phase 6 is in [docs/ROADMAP.md](ROADMAP.md). The parked candidate is the Phase 3 same-database script on this runner. That records `chain_invalid`. It is not attestation success.
+Phase 5 (issue #47) runs the operate script on a GitHub-hosted KVM runner. Phase 6 (issue #49) gates `disallowFactoryReset` on that same job. Phase 7 (issue #51) hardens that job. Phase 4, Phase 5, Phase 6, and Phase 7 are not Feature GO. The next slice is in [docs/ROADMAP.md](ROADMAP.md): none. This drive is at the Pixel/GrapheneOS founder-only stop. No remaining org-can-do slice moves the founder bar. The Phase 3 same-database script on this runner records `chain_invalid`. That is not attestation success.
 
 ## 4. Boundaries
 
@@ -145,10 +155,11 @@ These are the standing limits. Feature work and emulator demos are not frozen.
 
 - [docs/ROADMAP.md](ROADMAP.md) — phases, the next slice, and its definition of done.
 - [docs/ENROLLMENT.md](ENROLLMENT.md) — ADB Device Owner on a clean Pixel. QR needs a wizard that launches ManagedProvisioning.
-- [docs/EMULATOR.md](EMULATOR.md) — AOSP ATD device-owner bench (#36 / #38), Phase 3 same-database attestation, Phase 4 disallowAddUser (issue #45), and Phase 6 disallowFactoryReset (issue #49).
+- [docs/EMULATOR.md](EMULATOR.md) — AOSP ATD device-owner bench (#36 / #38), Phase 3 same-database attestation, Phase 4 disallowAddUser (issue #45), Phase 6 disallowFactoryReset (issue #49), and Phase 7 CI hardening (issue #51).
 - [docs/ops/HANDOFF-p4-disallow-add-user-2026-10-09.md](ops/HANDOFF-p4-disallow-add-user-2026-10-09.md) — Phase 4 handoff.
 - [docs/ops/HANDOFF-p5-gha-kvm-2026-10-09.md](ops/HANDOFF-p5-gha-kvm-2026-10-09.md) — Phase 5 handoff (GitHub-hosted KVM runner).
 - [docs/ops/HANDOFF-p6-factory-reset-2026-10-12.md](ops/HANDOFF-p6-factory-reset-2026-10-12.md) — Phase 6 handoff (`disallowFactoryReset` on that job).
+- [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md) — Phase 7 handoff (CI hardening). The Cursor Approval waiver stays open.
 - [docs/MTLS.md](MTLS.md) — mTLS check-in, lab `--db`, fleet CA alignment.
 - [docs/SCHEDULING.md](SCHEDULING.md) — WorkManager periodic check-in and `checkin_now`.
 - [docs/design/](design/) — operator journey, wireframes, wipe gate.
@@ -164,7 +175,7 @@ Use the procedures in those docs.
 - Simulated row (shipped #35/#37): `python3 lab_checkin.py --db fleet.sqlite --simulate`, then `ui_server.py` on 127.0.0.1:8787.
 - Emulator device owner (#36/#38): [scripts/emulator-device-owner.sh](../scripts/emulator-device-owner.sh). One check-in. Read `challenge_mismatch` on that script as the Phase 2 caveat, not as a pass on attestation.
 - Same-database attestation (Phase 3): [scripts/emulator-same-db-attestation.sh](../scripts/emulator-same-db-attestation.sh). Two check-ins, one new sqlite. Quote the second `attestationStatus`. `chain_invalid` on userdebug/test-keys is the expected record, not `ok`.
-- disallowAddUser on the operator page (Phase 4, issue #45): [scripts/emulator-policy-disallow-add-user.sh](../scripts/emulator-policy-disallow-add-user.sh). One check-in. `DISALLOW_ADD_USER=false` and `absent` are expected to fail. Do not read the run as attestation success.
+- User restrictions on the operator page (Phase 4 issue #45, Phase 6 issue #49, Phase 7 issue #51): [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). `DISALLOW_ADD_USER=false` and `absent` are expected to fail. `RESTRICTION=disallowFactoryReset` is the factory-reset flag, not a wipe. Do not read the run as attestation success.
 - Phase 5 on GitHub Actions (issue #47): [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml) runs [scripts/ci-emulator-policy.sh](../scripts/ci-emulator-policy.sh) on an AOSP ATD emulator. `workflow_dispatch` runs it by hand. Logs are the `emulator-policy-logs` artifact.
 - disallowFactoryReset on that job (Phase 6, issue #49): `RESTRICTION=disallowFactoryReset`. `DISALLOW_FACTORY_RESET=false` and `absent` are expected to fail. Do not factory-reset the emulator. Do not read the run as attestation success or as GrapheneOS.
 - Pixel enrollment, when the founder is at the hardware: [docs/ENROLLMENT.md](ENROLLMENT.md).
