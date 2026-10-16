@@ -18,10 +18,12 @@
 #   factory-false            -> must exit 1
 #   factory-true-then-false  -> must exit 0 (clears only when API 34+ sees an
 #                               anchored Local Policies: or Global Policies:
-#                               line, UserInfo{, and a restriction header, no
+#                               line plus UserRestrictionPolicyKey or a
+#                               non-empty indented line under that header,
+#                               UserInfo{, and a restriction header, no
 #                               DUMP TIMEOUT line, and policy_restriction.py
 #                               exits 1 with "restriction no_factory_reset is
-#                               not applied")
+#                               not applied". A header alone is not a clear.)
 #   factory-true             -> must exit 0
 #   post-run-factory-reset   -> device owner and no_factory_reset applied
 #

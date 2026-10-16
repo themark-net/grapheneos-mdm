@@ -164,6 +164,40 @@ class ClearLegStubTest(unittest.TestCase):
             self.assertNotIn("set-device-owner", proc.stdout)
             self.assertNotIn("set-device-owner", proc.stderr)
 
+    def test_stub_refuses_when_serial_is_set_empty(self) -> None:
+        # SERIAL= and ANDROID_SERIAL= are set. An empty value is still a
+        # caller target. ${VAR+x} sees it; ${VAR-} would let the stub run.
+        accepted = self._run(_CLEARED_POLICY, _CLEARED_USER)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        for key in ("SERIAL", "ANDROID_SERIAL"):
+            proc = self._run(_CLEARED_POLICY, _CLEARED_USER, {key: ""})
+            self.assertEqual(proc.returncode, 1, proc.stderr)
+            self.assertIn(
+                "FAIL: CLEAR_LEG_STUB refused because adb/SERIAL is configured",
+                proc.stderr,
+            )
+            self.assertNotIn("PASS:", proc.stdout)
+            self.assertNotIn("set-device-owner", proc.stdout)
+            self.assertNotIn("set-device-owner", proc.stderr)
+
+    def test_header_only_device_policy_fails_the_clear_leg(self) -> None:
+        policy = (
+            "Current Device Policy Manager state:\n"
+            "  Local Policies:\n"
+            "    \n"
+            "  Global Policies:\n"
+        )
+        self.assertNotIn("UserRestrictionPolicyKey", policy)
+        proc = self._run(policy, _CLEARED_USER)
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn(
+            "FAIL: step clear: after-false device_policy dump lacks "
+            "UserRestrictionPolicyKey or a section body",
+            proc.stderr,
+        )
+        self.assertNotIn("PASS:", proc.stdout)
+        self.assertNotIn("is not applied", proc.stdout)
+
     def test_api33_device_owner_marker_is_not_enough_on_api35(self) -> None:
         policy = "Device Owner:\n  admin=net.themark.grapheneosmdm\n"
         legacy = self._run(policy, _CLEARED_USER, {"API_LEVEL": "33"})

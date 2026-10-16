@@ -4,10 +4,12 @@
 Reads `dumpsys device_policy` and `dumpsys user`. Exits 0 and prints the
 matching lines when the restriction is applied. Exits 1 when a recognised
 dumpsys does not show it applied. Exits 2 when the input is empty,
-unrecognised, contains `*** SERVICE ... DUMP TIMEOUT`, or, when
-`--api-level` is 34 or higher, lacks an anchored `Local Policies:` or
-`Global Policies:` line, `UserInfo{`, or a restriction header. Exits 3
-on an argparse usage error.
+unrecognised, contains `*** SERVICE ... DUMP TIMEOUT`, a dumpsys file
+cannot be read, or, when `--api-level` is 34 or higher, lacks an anchored
+`Local Policies:` or `Global Policies:` line, `UserRestrictionPolicyKey`
+or a non-empty indented line under that header, `UserInfo{`, or a
+restriction header. A header with no body is not enough. Exits 3 on an
+argparse usage error.
 Exit 2 and exit 3 are not a clear.
 
 A match is a whole restriction token. `no_add_user` does not match
@@ -21,10 +23,11 @@ marker, prints `dumpsys input is empty or unrecognised` and exits 2.
 A usage error (missing or unknown argument) exits 3 and does not print
 that sentence. `--api-level` 34 or higher also exits 2, naming the missing
 marker, unless device_policy has an anchored `Local Policies:` or
-`Global Policies:` line and the user dump has `UserInfo{` plus one of
-the restriction headers above. A mid-line mention of those headers does
-not count. API 35 ATD `dumpsys device_policy` has no DevicePolicyEngine
-line.
+`Global Policies:` line, plus `UserRestrictionPolicyKey` or at least one
+non-empty indented line under that header, and the user dump has
+`UserInfo{` plus one of the restriction headers above. A mid-line mention
+of those headers does not count. A header alone does not count. API 35
+ATD `dumpsys device_policy` has no DevicePolicyEngine line.
 
 dumpsys user evidence is a line inside one of these blocks:
 
@@ -97,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         user_dump = args.user.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         print(f"could not read dumpsys file: {exc}", file=sys.stderr)
-        return 1
+        return 2
     problem = dumpsys_input_problem(device_policy, user_dump, args.api_level)
     if problem is not None:
         print(_problem_message(problem), file=sys.stderr)
@@ -136,7 +139,9 @@ _DUMP_MARKERS = (
 
 _TIMEOUT = re.compile(r"\*\*\* SERVICE .*DUMP TIMEOUT")
 # API 35 ATD prints these as their own lines ("  Local Policies: ").
-# A mention later on the line is not a section.
+# A mention later on the line is not a section. The header alone is not
+# a section: the dump also needs UserRestrictionPolicyKey, or at least
+# one non-empty line indented under the header.
 _ENGINE_SECTION = re.compile(
     r"(?m)^[ \t]*(?:Local Policies:|Global Policies:)[ \t]*$"
 )
@@ -163,6 +168,8 @@ def dumpsys_input_problem(
         missing: list[str] = []
         if _ENGINE_SECTION.search(device_policy) is None:
             missing.append("Local Policies or Global Policies section")
+        elif not _policy_section_evidence(device_policy):
+            missing.append("UserRestrictionPolicyKey or section body")
         if "UserInfo{" not in user_dump:
             missing.append("UserInfo{")
         if _RESTRICTION_HEADER.search(user_dump) is None:
@@ -174,6 +181,36 @@ def dumpsys_input_problem(
     if not any(marker in blob for marker in _DUMP_MARKERS):
         return "unrecognised"
     return None
+
+
+def _policy_section_evidence(device_policy: str) -> bool:
+    """True when the dump has a policy key or a non-empty section body.
+
+    A `Local Policies:` or `Global Policies:` header with only blank lines
+    under it is not evidence. An indented line counts only when it has
+    text and is indented further than the header.
+    """
+    if "UserRestrictionPolicyKey" in device_policy:
+        return True
+    lines = device_policy.splitlines()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if _ENGINE_SECTION.fullmatch(line) is None:
+            index += 1
+            continue
+        header_indent = len(line) - len(line.lstrip(" \t"))
+        index += 1
+        while index < len(lines):
+            entry = lines[index]
+            if entry.strip() == "":
+                index += 1
+                continue
+            entry_indent = len(entry) - len(entry.lstrip(" \t"))
+            if entry_indent <= header_indent:
+                break
+            return True
+    return False
 
 
 def _problem_message(problem: str) -> str:

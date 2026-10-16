@@ -2,14 +2,14 @@
 
 Continuation note for the next harness. Read [docs/ROADMAP.md](ROADMAP.md) for the next slice. Issue **#8** stays closed. Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner. That gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
 
-Updated 2026-10-13 on `build/p7-ci-hardening` (Phase 7, issue #51). `main` is at `0c54704` (`0c54704e5a4218cbf09d752599edb3b0e19e1f5e`, Phase 6, PR #50). This file describes the Phase 7 branch. It is not merged. Pull request #52 is open (https://github.com/themark-net/grapheneos-mdm/pull/52).
+Updated 2026-10-16 on `build/p7-1-hygiene` (Phase 7.1, issue #53). `main` is at `8a7164c` (`8a7164ca86362f01d078f8d29fdbd4e76a16a42d`, Phase 7, PR #52). #52 merged at `8a7164c`. This file describes the Phase 7.1 branch. It is not merged.
 
 ## 1. Tip
 
 | | |
 | --- | --- |
-| Branch before this change | `main` at `0c54704` (Phase 6, PR #50) |
-| This change | Phase 7: CI hardening of the emulator-policy job (issue #51). Not merged. Pull request #52 is open. |
+| Branch before this change | `main` at `8a7164c` (Phase 7, PR #52) |
+| This change | Phase 7.1: hygiene follow-ups from issue #53. Not merged. |
 | Earlier tips | `e43fc37` Phase 5 (PR #48), `4784a79` Phase 3 (#44), `ed62c4a` docs handoff (#43) |
 | Ancestor feature | `b5fd229` (`b5fd229f86326b7c428365c8f49b6fb218a6d002`), Android emulator device-owner (#38) |
 
@@ -99,13 +99,19 @@ The same [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-p
 
 ### CI hardening — Phase 7
 
-Issue #51. Branch `build/p7-ci-hardening`, based on `main` at `0c54704`. Handoff: [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md). Decisions: [docs/ops/AUTONOMOUS-DECISIONS-2026-10-13.md](ops/AUTONOMOUS-DECISIONS-2026-10-13.md). Not Feature GO. Not merged. Pull request #52 is open (https://github.com/themark-net/grapheneos-mdm/pull/52).
+Issue #51. Pull request #52 merged to main at `8a7164c`. Handoff: [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md). Decisions: [docs/ops/AUTONOMOUS-DECISIONS-2026-10-13.md](ops/AUTONOMOUS-DECISIONS-2026-10-13.md). Not Feature GO.
 
-The operate script is [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). On API 34 and above, the restriction step and the clear leg require an anchored `Local Policies:` or `Global Policies:` line (a mid-line mention does not count; API 35 ATD dumps have no `DevicePolicyEngine` line), `UserInfo{`, and a restriction header, and they fail on `*** SERVICE ... DUMP TIMEOUT`. [server/policy_restriction.py](../server/policy_restriction.py) exits 3 on an argparse usage error and 2 on empty, unrecognised, timeout, or a missing API 34 marker. `CLEAR_LEG_STUB` lives in [scripts/lib/clear-leg.sh](../scripts/lib/clear-leg.sh) and refuses a caller-supplied `SERIAL` or `ANDROID_SERIAL`. The BouncyCastle exclusion is the line `!/tmp/mdm-ci/**/*.bks` in [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml), and `-name '*.bks'` in [scripts/lib/cert-guard.sh](../scripts/lib/cert-guard.sh). JavaScript actions are pinned to Node 24 releases. `PolicyRestrictionTest` compares pairs as a map. ASSERT lines are printed once.
+The operate script is [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). On API 34 and above, the restriction step and the clear leg require an anchored `Local Policies:` or `Global Policies:` line plus `UserRestrictionPolicyKey` or a non-empty indented line under that header (a header alone does not count; a mid-line mention does not count; API 35 ATD dumps have no `DevicePolicyEngine` line), `UserInfo{`, and a restriction header, and they fail on `*** SERVICE ... DUMP TIMEOUT`. [server/policy_restriction.py](../server/policy_restriction.py) exits 3 on an argparse usage error and 2 on empty, unrecognised, timeout, a file it cannot read, or a missing API 34 marker. `CLEAR_LEG_STUB` lives in [scripts/lib/clear-leg.sh](../scripts/lib/clear-leg.sh) and refuses a caller-supplied `SERIAL` or `ANDROID_SERIAL`, including a set-but-empty value. The BouncyCastle exclusion is the line `!/tmp/mdm-ci/**/*.bks` in [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml), and `-name '*.bks'` in [scripts/lib/cert-guard.sh](../scripts/lib/cert-guard.sh). JavaScript actions are pinned to Node 24 releases. `PolicyRestrictionTest` compares pairs as a map. ASSERT lines are printed once.
 
-Cursor Approval is not green. PR #50 head `c9e646b` concluded `neutral` (`Approval Agent run encountered an error`, run `bc-9a8d6e3e`). Main `0c54704` has no Cursor Approval check. Pull request #52 is open. On `e852c6f` the Cursor Approval check concluded `neutral`. The waiver on issue #51 stays open. This commit does not close it.
+Cursor Approval is not green. PR #50 head `c9e646b` concluded `neutral` (`Approval Agent run encountered an error`, run `bc-9a8d6e3e`). Main `0c54704` has no Cursor Approval check. On `e852c6f` the Cursor Approval check concluded `neutral`. #52 merged to main at `8a7164c`. The waiver is issue #53 and stays open. This commit does not close it.
 
-emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. The repair on this branch has not had a green emulator-policy run. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
+emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. emulator-policy run 38446617330 (https://github.com/themark-net/grapheneos-mdm/actions/runs/38446617330) on 8744c58 is green; #52 merged to main at 8a7164c. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
+
+### Hygiene — Phase 7.1
+
+Issue #53. Branch `build/p7-1-hygiene`, based on `main` at `8a7164c`. Decisions: [docs/ops/AUTONOMOUS-DECISIONS-2026-10-16.md](ops/AUTONOMOUS-DECISIONS-2026-10-16.md). Not Feature GO. Not merged.
+
+Six follow-ups from #52, in one pull request. The after-false `device_policy` dump must show `UserRestrictionPolicyKey` or a section body, not only the header. `accept_cleared_restriction` saves and restores errexit. The parser exits 2 when it cannot read its input file. An empty `SERIAL=` or `ANDROID_SERIAL=` counts as set for the stub refusal. The image is an AOSP ATD emulator. Attestation is not asserted. Issue #53 stays open for the Cursor Approval waiver.
 
 ### Earlier squash merges
 
@@ -139,7 +145,7 @@ Issue #8 stays closed. The wizard gap is upstream SetupWizard2 PR #40, unchanged
 
 Founder draft PR **#42** (`founder-build-babysit/2026-10-05`) is not the next slice. Leave it untouched.
 
-Phase 5 (issue #47) runs the operate script on a GitHub-hosted KVM runner. Phase 6 (issue #49) gates `disallowFactoryReset` on that same job. Phase 7 (issue #51) hardens that job. Phase 4, Phase 5, Phase 6, and Phase 7 are not Feature GO. The next slice is in [docs/ROADMAP.md](ROADMAP.md): none. This drive is at the Pixel/GrapheneOS founder-only stop. No remaining org-can-do slice moves the founder bar. The Phase 3 same-database script on this runner records `chain_invalid`. That is not attestation success.
+Phase 5 (issue #47) runs the operate script on a GitHub-hosted KVM runner. Phase 6 (issue #49) gates `disallowFactoryReset` on that same job. Phase 7 (issue #51) hardens that job. Pull request #52 merged at `8a7164c`. Phase 7.1 (issue #53) is the hygiene follow-ups, in one pull request. Phase 4, Phase 5, Phase 6, Phase 7, and Phase 7.1 are not Feature GO. After this Phase 7.1 pull request lands, org-can-do work is exhausted. The next step is the founder-only Pixel/GrapheneOS stop. See [docs/ROADMAP.md](ROADMAP.md). No remaining org-can-do slice moves the founder bar. The Phase 3 same-database script on this runner records `chain_invalid`. That is not attestation success.
 
 ## 4. Boundaries
 
@@ -159,7 +165,8 @@ These are the standing limits. Feature work and emulator demos are not frozen.
 - [docs/ops/HANDOFF-p4-disallow-add-user-2026-10-09.md](ops/HANDOFF-p4-disallow-add-user-2026-10-09.md) — Phase 4 handoff.
 - [docs/ops/HANDOFF-p5-gha-kvm-2026-10-09.md](ops/HANDOFF-p5-gha-kvm-2026-10-09.md) — Phase 5 handoff (GitHub-hosted KVM runner).
 - [docs/ops/HANDOFF-p6-factory-reset-2026-10-12.md](ops/HANDOFF-p6-factory-reset-2026-10-12.md) — Phase 6 handoff (`disallowFactoryReset` on that job).
-- [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md) — Phase 7 handoff (CI hardening). The Cursor Approval waiver stays open.
+- [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md) — Phase 7 handoff (CI hardening). The Cursor Approval waiver stays open on issue #53.
+- [docs/ops/AUTONOMOUS-DECISIONS-2026-10-16.md](ops/AUTONOMOUS-DECISIONS-2026-10-16.md) — Phase 7.1 decisions. Issue #53 stays open for the Cursor Approval waiver.
 - [docs/MTLS.md](MTLS.md) — mTLS check-in, lab `--db`, fleet CA alignment.
 - [docs/SCHEDULING.md](SCHEDULING.md) — WorkManager periodic check-in and `checkin_now`.
 - [docs/design/](design/) — operator journey, wireframes, wipe gate.

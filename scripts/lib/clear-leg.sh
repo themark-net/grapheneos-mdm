@@ -3,16 +3,20 @@
 # Sourced by scripts/emulator-policy-restriction.sh. Not executed directly.
 #
 # On API 34 and above, a dumpsys counts only when device_policy has an
-# anchored "Local Policies:" or "Global Policies:" line and dumpsys user
-# has UserInfo{ plus a restriction header. A mid-line mention of those
+# anchored "Local Policies:" or "Global Policies:" line, plus
+# UserRestrictionPolicyKey or at least one non-empty indented line under
+# that header, and dumpsys user has UserInfo{ plus a restriction header.
+# A header with no body does not count. A mid-line mention of those
 # headers does not count. API 35 ATD dumps have no DevicePolicyEngine
 # line. A line matching '*** SERVICE ... DUMP TIMEOUT' is a failed
 # capture on every API level.
 #
 # CLEAR_LEG_STUB=1 (via run_clear_leg_stub) runs only this gate. It refuses
-# to run when the caller set SERIAL or ANDROID_SERIAL, so stub mode cannot
-# aim at an adb target. The operate script saves those values before it
-# applies the nimo SERIAL default.
+# to run when the caller set SERIAL or ANDROID_SERIAL, including a
+# set-but-empty value, so stub mode cannot aim at an adb target. The
+# operate script saves that set-state before it applies the nimo SERIAL
+# default. ${VAR+x} is set when the variable is set, even when the value
+# is empty.
 
 if ! declare -F fail >/dev/null 2>&1; then
   fail() {
@@ -52,6 +56,9 @@ require_api_dumpsys() {
     if ! grep -q -E '^[[:space:]]*(Local Policies:|Global Policies:)[[:space:]]*$' "$policy_file"; then
       fail "${prefix} device_policy dump lacks a Local Policies or Global Policies section"
     fi
+    if ! _policy_section_evidence "$policy_file"; then
+      fail "${prefix} device_policy dump lacks UserRestrictionPolicyKey or a section body"
+    fi
     if ! grep -q -F 'UserInfo{' "$user_file"; then
       fail "${prefix} dumpsys user lacks UserInfo{"
     fi
@@ -68,14 +75,50 @@ require_api_dumpsys() {
   fi
 }
 
+# 0 when device_policy has UserRestrictionPolicyKey, or a Local/Global
+# Policies header with at least one non-empty line indented under it.
+# A header, or a whitespace-only indented line, is not a body.
+_policy_section_evidence() {
+  local policy_file="$1"
+  if grep -q -F 'UserRestrictionPolicyKey' "$policy_file"; then
+    return 0
+  fi
+  awk '
+    function indent_of(s) {
+      if (match(s, /^[ \t]*/)) return RLENGTH
+      return 0
+    }
+    /^[ \t]*(Local Policies:|Global Policies:)[ \t]*$/ {
+      header_indent = indent_of($0)
+      in_section = 1
+      next
+    }
+    in_section {
+      if ($0 ~ /^[ \t]*$/) next
+      if (indent_of($0) > header_indent) {
+        found = 1
+        exit
+      }
+      in_section = 0
+    }
+    END { exit (found ? 0 : 1) }
+  ' "$policy_file"
+}
+
 # accept_cleared_restriction <policy> <user> <output> <api_level>
 # Uses TOKEN, FLAG_KEY, and ROOT from the caller. Exit 2 from
-# policy_restriction.py is an empty or unrecognised dumpsys. Exit 3 is an
-# argparse usage error. Neither one is a clear.
+# policy_restriction.py is an empty or unrecognised dumpsys, or a file
+# it could not read. Exit 3 is an argparse usage error. Neither one is
+# a clear.
 accept_cleared_restriction() {
   local policy_file="$1" user_file="$2" out_file="$3" api="$4"
-  local rc msg
+  local rc msg errexit=0
   require_api_dumpsys clear "$policy_file" "$user_file" "$api"
+  # Save set -o errexit. The parser is allowed to exit non-zero. Restoring
+  # only when it was on keeps a caller that had errexit off from picking it up.
+  case $- in
+    *e*) errexit=1 ;;
+  esac
   set +e
   python3 "$ROOT/server/policy_restriction.py" \
     --restriction "$TOKEN" \
@@ -84,7 +127,9 @@ accept_cleared_restriction() {
     --api-level "$api" \
     >"$out_file" 2>&1
   rc=$?
-  set -e
+  if [ "$errexit" -eq 1 ]; then
+    set -e
+  fi
   cat "$out_file"
   if [ "$rc" -eq 3 ]; then
     fail "step clear: policy_restriction.py usage error (exit=3)"
@@ -107,7 +152,8 @@ accept_cleared_restriction() {
 # Host-only entry. Caller sets DEVICE_POLICY_FILE, USER_DUMP_FILE, TOKEN,
 # FLAG_KEY, ROOT, and optional OUT and API_LEVEL (default 35).
 run_clear_leg_stub() {
-  if [ -n "${_CALLER_SERIAL:-}" ] || [ -n "${_CALLER_ANDROID_SERIAL:-}" ]; then
+  # ${VAR+x} is set when the caller set the variable, including VAR=.
+  if [ -n "${_CALLER_SERIAL+x}" ] || [ -n "${_CALLER_ANDROID_SERIAL+x}" ]; then
     fail "CLEAR_LEG_STUB refused because adb/SERIAL is configured"
   fi
   [ -n "${DEVICE_POLICY_FILE:-}" ] || fail "CLEAR_LEG_STUB requires DEVICE_POLICY_FILE"

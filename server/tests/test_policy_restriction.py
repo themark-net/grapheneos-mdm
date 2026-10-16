@@ -391,6 +391,77 @@ class PolicyRestrictionTest(unittest.TestCase):
         self.assertNotIn("is not applied", proc.stderr)
         self.assertEqual(proc.stdout, "")
 
+    def test_header_only_device_policy_dump_is_rejected(self) -> None:
+        # The anchored header is present. There is no UserRestrictionPolicyKey
+        # and no non-empty indented line under it. That must not count as a
+        # clear (exit 1). The real API 35 ATD fixtures still have a body.
+        header_only = (
+            "Current Device Policy Manager state:\n"
+            "  Local Policies:\n"
+            "    \n"
+            "  Global Policies:\n"
+            "\n"
+        )
+        self.assertRegex(header_only, _SECTION_LINE)
+        self.assertNotIn("UserRestrictionPolicyKey", header_only)
+        rejected = self._run(
+            header_only, _USER_FACTORY_FALSE, "no_factory_reset", api_level=35
+        )
+        self.assertEqual(rejected.returncode, 2, rejected.stderr)
+        self.assertIn(
+            "missing UserRestrictionPolicyKey or section body", rejected.stderr
+        )
+        self.assertNotIn("is not applied", rejected.stderr)
+        self.assertEqual(rejected.stdout, "")
+
+        body_only = (
+            "Current Device Policy Manager state:\n"
+            "  Local Policies:\n"
+            "    User 0:\n"
+            "  Global Policies:\n"
+        )
+        self.assertNotIn("UserRestrictionPolicyKey", body_only)
+        body = self._run(body_only, _USER_FACTORY_FALSE, "no_factory_reset", api_level=35)
+        self._assert_not_applied(body, "no_factory_reset")
+
+        key_only = (
+            "Current Device Policy Manager state:\n"
+            "  Local Policies:\n"
+            "  Global Policies:\n"
+            "UserRestrictionPolicyKey userRestriction_no_config_wifi\n"
+        )
+        key = self._run(key_only, _USER_FACTORY_FALSE, "no_factory_reset", api_level=35)
+        self._assert_not_applied(key, "no_factory_reset")
+
+        false_dump = self._run(
+            REAL_FALSE_POLICY, _USER_FACTORY_FALSE, "no_factory_reset", api_level=35
+        )
+        self._assert_not_applied(false_dump, "no_factory_reset")
+        true_dump = self._run(REAL_TRUE_POLICY, _USER_EFFECTIVE, api_level=35)
+        self.assertEqual(true_dump.returncode, 0, true_dump.stderr)
+
+    def test_unreadable_dumpsys_file_exits_2(self) -> None:
+        missing = FIXTURES / "no-such-device_policy.txt"
+        self.assertFalse(missing.exists())
+        proc = subprocess.run(
+            [
+                *CLI,
+                "--restriction",
+                "no_add_user",
+                "--device-policy",
+                str(missing),
+                "--user",
+                str(FIXTURES / "api35-atd-false-device_policy.txt"),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("could not read dumpsys file", proc.stderr)
+        self.assertNotIn("is not applied", proc.stderr)
+        self.assertNotIn("usage:", proc.stderr.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -71,23 +71,29 @@ The artifact excludes `fleet.sqlite*` (the WAL can hold an attestation chain) an
 
 ### Phase 7 — CI hardening
 
-**In progress on this branch.** org-can-do. Issue #51, branch `build/p7-ci-hardening`, based on `main` at `0c54704`. Not Feature GO. Handoff: [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md). Pull request #52 is open (https://github.com/themark-net/grapheneos-mdm/pull/52). This phase is not merged.
+**Done.** org-can-do. Issue #51. Pull request #52 merged to main at `8a7164c`. Not Feature GO. Handoff: [docs/ops/HANDOFF-p7-ci-hardening-2026-10-13.md](ops/HANDOFF-p7-ci-hardening-2026-10-13.md).
 
-The same GitHub-hosted `ubuntu-latest` KVM job. No self-hosted runner. The operate script is [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). It still covers `disallowAddUser` and `disallowFactoryReset`. On API 34 and above, a dumpsys counts only when `dumpsys device_policy` has an anchored `Local Policies:` or `Global Policies:` line (a mid-line mention does not count; API 35 ATD dumps have no `DevicePolicyEngine` line) and `dumpsys user` has `UserInfo{` plus a restriction header (`Effective restrictions:`, `Device policy global restrictions:`, `Device policy local restrictions:`, or `Device policy restrictions:`). A capture that contains `*** SERVICE ... DUMP TIMEOUT` fails and names that marker. [server/policy_restriction.py](../server/policy_restriction.py) exits 2 for empty, unrecognised, timeout, or a missing API 34 marker, and exits 3 for an argparse usage error. Exit 2 and exit 3 are not a clear and are not "not applied".
+The same GitHub-hosted `ubuntu-latest` KVM job. No self-hosted runner. The operate script is [scripts/emulator-policy-restriction.sh](../scripts/emulator-policy-restriction.sh). It still covers `disallowAddUser` and `disallowFactoryReset`. On API 34 and above, a dumpsys counts only when `dumpsys device_policy` has an anchored `Local Policies:` or `Global Policies:` line and either `UserRestrictionPolicyKey` or a non-empty indented line under that header (a header alone does not count; a mid-line mention does not count; API 35 ATD dumps have no `DevicePolicyEngine` line) and `dumpsys user` has `UserInfo{` plus a restriction header (`Effective restrictions:`, `Device policy global restrictions:`, `Device policy local restrictions:`, or `Device policy restrictions:`). A capture that contains `*** SERVICE ... DUMP TIMEOUT` fails and names that marker. [server/policy_restriction.py](../server/policy_restriction.py) exits 2 for empty, unrecognised, timeout, a file it cannot read, or a missing API 34 marker, and exits 3 for an argparse usage error. Exit 2 and exit 3 are not a clear and are not "not applied".
 
-`CLEAR_LEG_STUB` is [scripts/lib/clear-leg.sh](../scripts/lib/clear-leg.sh). The operate script sources it. Stub mode refuses to run when the caller set `SERIAL` or `ANDROID_SERIAL`.
+`CLEAR_LEG_STUB` is [scripts/lib/clear-leg.sh](../scripts/lib/clear-leg.sh). The operate script sources it. Stub mode refuses to run when the caller set `SERIAL` or `ANDROID_SERIAL`, including a set-but-empty value.
 
 The BouncyCastle keystore exclusion is the workflow line `!/tmp/mdm-ci/**/*.bks` in [.github/workflows/emulator-policy.yml](../.github/workflows/emulator-policy.yml). The cert guard lists `-name '*.bks'` in [scripts/lib/cert-guard.sh](../scripts/lib/cert-guard.sh).
 
 JavaScript actions in `ci.yml` and `emulator-policy.yml` are pinned to Node 24 releases. `reactivecircus/android-emulator-runner` v2.38.0 was already Node 24. `PolicyRestrictionTest` compares restriction pairs as a map. The image is an AOSP ATD emulator. Attestation is not asserted.
 
-Cursor Approval is not green. On PR #50 head `c9e646b` the check `Cursor Approval Agent: Pull Request Router and Approver` concluded `neutral` (`Approval Agent run encountered an error`, run `bc-9a8d6e3e`). The same check was `success` on `ef5b380`. Main `0c54704` has no Cursor Approval check. Pull request #52 is open. On `e852c6f` that check concluded `neutral`. The waiver on issue #51 stays open. This commit does not close it.
+Cursor Approval is not green. On PR #50 head `c9e646b` the check `Cursor Approval Agent: Pull Request Router and Approver` concluded `neutral` (`Approval Agent run encountered an error`, run `bc-9a8d6e3e`). The same check was `success` on `ef5b380`. Main `0c54704` has no Cursor Approval check. On `e852c6f` that check concluded `neutral`. #52 merged to main at `8a7164c`. The waiver is issue #53 and stays open. This commit does not close it.
 
-emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. The repair on this branch has not had a green emulator-policy run. The image is an AOSP ATD emulator. Attestation is not asserted.
+emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. emulator-policy run 38446617330 (https://github.com/themark-net/grapheneos-mdm/actions/runs/38446617330) on 8744c58 is green; #52 merged to main at 8a7164c. The image is an AOSP ATD emulator. Attestation is not asserted.
+
+### Phase 7.1 — Hygiene
+
+**In progress on this branch.** org-can-do. Issue #53. Not Feature GO. Decisions: [docs/ops/AUTONOMOUS-DECISIONS-2026-10-16.md](ops/AUTONOMOUS-DECISIONS-2026-10-16.md).
+
+Six follow-ups from #52, in one pull request. The after-false `device_policy` dump must contain `UserRestrictionPolicyKey` or a non-empty indented line under an anchored `Local Policies:` or `Global Policies:` header. A header with no body is not a clear. `policy_restriction.py` exits 2 when it cannot read its input file. `CLEAR_LEG_STUB` refuses `SERIAL=` and `ANDROID_SERIAL=` when those variables are set, including set to empty. The image is an AOSP ATD emulator. Attestation is not asserted. Issue #53 stays open for the Cursor Approval waiver.
 
 ## Next slice
 
-None. This drive is at the Pixel/GrapheneOS founder-only stop. No remaining org-can-do slice moves the founder bar.
+After this Phase 7.1 pull request lands, org-can-do work is exhausted. The next step is the founder-only Pixel/GrapheneOS stop. No remaining org-can-do slice moves the founder bar.
 
 The founder bar is the same device-owner check-in loop on a Pixel running GrapheneOS, with `attestationStatus` `ok`. The AOSP ATD emulator does not meet that bar. Putting the Phase 3 same-database script on this runner records `chain_invalid`. That is a record, not attestation progress. Another user restriction does not move the bar. Pixel enroll, fleet CA material, the production control plane, and the license stay in [Founder-needed](#founder-needed). Do not start them from an org harness.
 
