@@ -335,7 +335,7 @@ Both are present. A planted `secret.bks` fails the guard. The same bytes renamed
 
 ASSERT lines are printed once, when the leg finishes. The wrapper writes them to `summary.txt` and does not print that file again.
 
-Cursor Approval is not green. On `e852c6f` the Cursor Approval check concluded `neutral`. #52 merged to main at `8a7164c`. The waiver is issue #53 and stays open. This commit does not close it. emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. emulator-policy run 38446617330 (https://github.com/themark-net/grapheneos-mdm/actions/runs/38446617330) on 8744c58 is green; #52 merged to main at 8a7164c. The image is an AOSP ATD emulator. Attestation is not asserted.
+Cursor Approval is not green. On `e852c6f` the Cursor Approval check concluded `neutral`. #52 merged to main at `8a7164c`. The waiver is issue #53 and stays open. This commit does not close it. emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. emulator-policy run 38446617330 (https://github.com/themark-net/grapheneos-mdm/actions/runs/38446617330) on 8744c58 is green. The image is an AOSP ATD emulator. Attestation is not asserted.
 
 ## Phase 7.1 — Hygiene
 

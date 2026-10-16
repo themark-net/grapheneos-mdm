@@ -443,6 +443,10 @@ class PolicyRestrictionTest(unittest.TestCase):
     def test_unreadable_dumpsys_file_exits_2(self) -> None:
         missing = FIXTURES / "no-such-device_policy.txt"
         self.assertFalse(missing.exists())
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        user_path = Path(tmp.name) / "dumpsys_user.txt"
+        user_path.write_text(_USER_FACTORY_FALSE, encoding="utf-8")
         proc = subprocess.run(
             [
                 *CLI,
@@ -451,7 +455,7 @@ class PolicyRestrictionTest(unittest.TestCase):
                 "--device-policy",
                 str(missing),
                 "--user",
-                str(FIXTURES / "api35-atd-false-device_policy.txt"),
+                str(user_path),
             ],
             check=False,
             capture_output=True,

@@ -164,6 +164,34 @@ class ClearLegStubTest(unittest.TestCase):
             self.assertNotIn("set-device-owner", proc.stdout)
             self.assertNotIn("set-device-owner", proc.stderr)
 
+    def _errexit_after_clear(self, mode: str) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "p.txt").write_text(_CLEARED_POLICY, encoding="utf-8")
+            (root / "u.txt").write_text(_CLEARED_USER, encoding="utf-8")
+            script = (
+                f"set {mode}\n"
+                f'source "{LIB}"\n'
+                f'ROOT="{ROOT}" TOKEN=no_factory_reset FLAG_KEY=disallowFactoryReset\n'
+                f'accept_cleared_restriction "{root}/p.txt" "{root}/u.txt" "{root}/o.txt" 35\n'
+                'case $- in *e*) echo ERREXIT=on ;; *) echo ERREXIT=off ;; esac\n'
+            )
+            return subprocess.run(
+                ["bash", "-c", script], check=False, capture_output=True, text=True
+            )
+
+    def test_accept_cleared_restriction_keeps_errexit_off(self) -> None:
+        proc = self._errexit_after_clear("+e")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("restriction no_factory_reset is not applied", proc.stdout)
+        self.assertIn("ERREXIT=off", proc.stdout)
+        self.assertNotIn("ERREXIT=on", proc.stdout)
+
+    def test_accept_cleared_restriction_restores_errexit_on(self) -> None:
+        proc = self._errexit_after_clear("-e")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("ERREXIT=on", proc.stdout)
+
     def test_stub_refuses_when_serial_is_set_empty(self) -> None:
         # SERIAL= and ANDROID_SERIAL= are set. An empty value is still a
         # caller target. ${VAR+x} sees it; ${VAR-} would let the stub run.

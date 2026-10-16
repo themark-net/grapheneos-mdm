@@ -2,7 +2,7 @@
 
 Continuation note for the next harness. Read [docs/ROADMAP.md](ROADMAP.md) for the next slice. Issue **#8** stays closed. Stock GrapheneOS SetupWizard branch 17 still has no 6-tap scanner. That gap is [SetupWizard2 PR #40](https://github.com/GrapheneOS/platform_packages_apps_SetupWizard2/pull/40).
 
-Updated 2026-10-16 on `build/p7-1-hygiene` (Phase 7.1, issue #53). `main` is at `8a7164c` (`8a7164ca86362f01d078f8d29fdbd4e76a16a42d`, Phase 7, PR #52). #52 merged at `8a7164c`. This file describes the Phase 7.1 branch. It is not merged.
+Updated 2026-10-16 on `build/p7-1-hygiene` (Phase 7.1, issue #53). `main` is at `8a7164c` (`8a7164ca86362f01d078f8d29fdbd4e76a16a42d`, Phase 7, PR #52). This file describes the Phase 7.1 branch. It is not merged.
 
 ## 1. Tip
 
@@ -105,7 +105,7 @@ The operate script is [scripts/emulator-policy-restriction.sh](../scripts/emulat
 
 Cursor Approval is not green. PR #50 head `c9e646b` concluded `neutral` (`Approval Agent run encountered an error`, run `bc-9a8d6e3e`). Main `0c54704` has no Cursor Approval check. On `e852c6f` the Cursor Approval check concluded `neutral`. #52 merged to main at `8a7164c`. The waiver is issue #53 and stays open. This commit does not close it.
 
-emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. emulator-policy run 38446617330 (https://github.com/themark-net/grapheneos-mdm/actions/runs/38446617330) on 8744c58 is green; #52 merged to main at 8a7164c. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
+emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. emulator-policy run 38446617330 (https://github.com/themark-net/grapheneos-mdm/actions/runs/38446617330) on 8744c58 is green. The image is an AOSP ATD emulator, not GrapheneOS. Attestation is not asserted.
 
 ### Hygiene — Phase 7.1
 

@@ -83,7 +83,7 @@ JavaScript actions in `ci.yml` and `emulator-policy.yml` are pinned to Node 24 r
 
 Cursor Approval is not green. On PR #50 head `c9e646b` the check `Cursor Approval Agent: Pull Request Router and Approver` concluded `neutral` (`Approval Agent run encountered an error`, run `bc-9a8d6e3e`). The same check was `success` on `ef5b380`. Main `0c54704` has no Cursor Approval check. On `e852c6f` that check concluded `neutral`. #52 merged to main at `8a7164c`. The waiver is issue #53 and stays open. This commit does not close it.
 
-emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. emulator-policy run 38446617330 (https://github.com/themark-net/grapheneos-mdm/actions/runs/38446617330) on 8744c58 is green; #52 merged to main at 8a7164c. The image is an AOSP ATD emulator. Attestation is not asserted.
+emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. emulator-policy run 38446617330 (https://github.com/themark-net/grapheneos-mdm/actions/runs/38446617330) on 8744c58 is green. The image is an AOSP ATD emulator. Attestation is not asserted.
 
 ### Phase 7.1 — Hygiene
 
