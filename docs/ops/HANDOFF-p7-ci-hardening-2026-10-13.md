@@ -1,6 +1,6 @@
 # Handoff — Phase 7 CI hardening — 2026-10-13
 
-Issue #51. Branch `build/p7-ci-hardening`, based on `main` at `0c54704` (`0c54704e5a4218cbf09d752599edb3b0e19e1f5e`, Phase 6, PR #50). Not Feature GO. Not merged. Pull request #52 is open (https://github.com/themark-net/grapheneos-mdm/pull/52). Draft PR #42 is untouched. Issue #8 stays closed.
+Issue #51. Branch `build/p7-ci-hardening`, based on `main` at `0c54704` (`0c54704e5a4218cbf09d752599edb3b0e19e1f5e`, Phase 6, PR #50). Not Feature GO. Pull request #52 (https://github.com/themark-net/grapheneos-mdm/pull/52) merged to main at `8a7164c`. Draft PR #42 is untouched. Issue #8 stays closed.
 
 The image is the AOSP ATD Android 15 emulator (`system-images;android-35;aosp_atd;x86_64`, `avd-name: mdm36`). It is not GrapheneOS. Attestation is not asserted. No Pixel. The operate script does not factory-reset or wipe. No self-hosted runner. No host or runner change.
 
@@ -8,7 +8,7 @@ Decisions: [AUTONOMOUS-DECISIONS-2026-10-13.md](AUTONOMOUS-DECISIONS-2026-10-13.
 
 ## Definition of done
 
-CEO comment on issue #51 asks for each hardening item done or declined, with the reason in the PR body. Pull request #52 is open. The reasons are here. None of the seven items is declined.
+CEO comment on issue #51 asks for each hardening item done or declined, with the reason in the PR body. The reasons are here. None of the seven items is declined.
 
 | Item | Result | Reason |
 | --- | --- | --- |
@@ -22,7 +22,7 @@ CEO comment on issue #51 asks for each hardening item done or declined, with the
 
 ## Negative proofs
 
-Each proof is a host fixture. emulator-policy ran on `e852c6f` and failed (https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873). That run is red. These fixtures are not a green emulator-policy run. The repair on this branch has not had a green emulator-policy run.
+Each proof is a host fixture. emulator-policy ran on `e852c6f` and failed (https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873). That run is red. These fixtures are not a green emulator-policy run. Run 38446617330 (https://github.com/themark-net/grapheneos-mdm/actions/runs/38446617330) on `8744c58` is green.
 
 - Bad dumpsys, API 35: a recognised dump that still exits 1 with `restriction <token> is not applied` fails with exit 2 when the anchored `Local Policies:` and `Global Policies:` lines, `UserInfo{`, or a restriction header is removed. A mid-line mention of those headers still fails (`test_anchored_section_rejects_a_midline_mention`). `server/tests/test_policy_restriction.py` (`test_api35_names_each_missing_marker`). The shell clear leg names `lacks a Local Policies or Global Policies section`, `lacks UserInfo{`, and `lacks a restriction header` (`server/tests/test_clear_leg_stub.py`). `Restrictions:` alone is not a header.
 - Timeout: the same applied dump plus a `*** SERVICE ... DUMP TIMEOUT` line exits 2 from `policy_restriction.py` and does not print `is not applied`. The clear-leg stub exits 1 and does not print `PASS`. The restriction step names `dumpsys contains *** SERVICE ... DUMP TIMEOUT`.
@@ -44,7 +44,7 @@ If a stricter marker flakes on the API 35 ATD image, the job must fail and name 
 - [scripts/ci-emulator-policy.sh](../../scripts/ci-emulator-policy.sh) — post-run parser gets the device SDK. Exit 2 and exit 3 are named. `assert_post_run` restores the errexit state it found, so an expected factory-absent exit does not skip the later legs, the cert guard, or RESULT. ASSERT lines go to the summary file once. The end of the log prints `summary file:` and does not cat the file.
 - [server/policy_restriction.py](../../server/policy_restriction.py) — `--api-level`. Exit 3 is argparse. Exit 2 covers empty, unrecognised, timeout, and a missing API 34 marker. On API 34 and above the device_policy marker is an anchored `Local Policies:` or `Global Policies:` line.
 - [.github/workflows/emulator-policy.yml](../../.github/workflows/emulator-policy.yml) — Node 24 pins, new path filters, and the `.bks` exclusion left as a real `path:` line. Job name, `ubuntu-latest`, the KVM udev step, the 45 minute timeout, and the emulator-runner SHA are unchanged.
-- [.github/workflows/ci.yml](../../.github/workflows/ci.yml) — same Node 24 pins. Triggers are still `push` to `main`, `feat/**`, and `fix/**`, plus `pull_request` to `main`. A branch push is not one of those push filters. Pull request #52 is open, so the push updates that pull request and the pull-request jobs run.
+- [.github/workflows/ci.yml](../../.github/workflows/ci.yml) — same Node 24 pins. Triggers are still `push` to `main`, `feat/**`, and `fix/**`, plus `pull_request` to `main`. A branch push is not one of those push filters. Pull request #52 merged to main at `8a7164c`.
 - [app/src/test/java/net/themark/grapheneosmdm/policy/PolicyRestrictionTest.kt](../../app/src/test/java/net/themark/grapheneosmdm/policy/PolicyRestrictionTest.kt) — map comparison. No production Kotlin change.
 
 Docs: [docs/ROADMAP.md](../ROADMAP.md), [docs/EMULATOR.md](../EMULATOR.md), [docs/PENDING-HANDOFF.md](../PENDING-HANDOFF.md), this file, and [AUTONOMOUS-DECISIONS-2026-10-13.md](AUTONOMOUS-DECISIONS-2026-10-13.md).
@@ -56,13 +56,13 @@ The waiver stays open. It is not closed.
 - PR #50 head `c9e646b94402a368cc9ff859ab763ad3e39980c4`: check `Cursor Approval Agent: Pull Request Router and Approver` (app `cursor`) concluded `neutral`. Summary: `Approval Agent run encountered an error`. Run `bc-9a8d6e3e-32bc-4fed-8c99-406f4b3832f4`.
 - The same check was `success` on `ef5b38089fcab96c616547adc18f58b879e66e62`.
 - Main `0c54704` has three green GitHub Actions checks (Android unit tests, Protocol schemas + lab check-in, AOSP ATD emulator policy) and no Cursor Approval check.
-- Pull request #52 is open. On `e852c6f` the Cursor Approval check concluded `neutral`. The waiver stays open. This commit does not close it.
+- On `e852c6f` the Cursor Approval check concluded `neutral`. The waiver carries over to issue #53 and stays open.
 
 ## CI on this head
 
-emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. The legs failed because the API 35 ATD `device_policy` dump has no `DevicePolicyEngine` line. The real section lines are `Local Policies:` and `Global Policies:`. `assert_post_run` then left errexit on, so factory-absent stopped the wrapper before the remaining factory legs, the cert guard, and RESULT. The repair on this branch has not had a green emulator-policy run. This session does not dispatch the workflow and does not merge.
+emulator-policy ran on `e852c6f` and failed: https://github.com/themark-net/grapheneos-mdm/actions/runs/38441669873. That run is red. The legs failed because the API 35 ATD `device_policy` dump has no `DevicePolicyEngine` line. The real section lines are `Local Policies:` and `Global Policies:`. `assert_post_run` then left errexit on, so factory-absent stopped the wrapper before the remaining factory legs, the cert guard, and RESULT. Run 38446617330 (https://github.com/themark-net/grapheneos-mdm/actions/runs/38446617330) on `8744c58` is green. This session does not dispatch the workflow and does not merge.
 
-The path filters do include `scripts/emulator-policy-restriction.sh` and `scripts/lib/**` on both the pull-request list and the main-push list. Pull request #52 is open, so a push of this branch starts the job. Do not call this head CI-green, and do not treat the merge gate as met.
+The path filters do include `scripts/emulator-policy-restriction.sh` and `scripts/lib/**` on both the pull-request list and the main-push list. emulator-policy run 38446617330 on `8744c58` is green, and #52 merged at `8a7164c`.
 
 `ci.yml` also does not run on this branch name.
 

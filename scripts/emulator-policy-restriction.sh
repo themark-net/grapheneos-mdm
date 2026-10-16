@@ -16,15 +16,17 @@
 # {"<flag>": false} in the same sqlite, broadcasts a second check-in, and
 # requires the dumpsys token to be gone. On API 34 and above, gone means the
 # after-false device_policy dump has an anchored Local Policies: or Global
-# Policies: line, dumpsys user has UserInfo{ and a restriction header,
+# Policies: line plus UserRestrictionPolicyKey or a non-empty indented line
+# under that header, dumpsys user has UserInfo{ and a restriction header,
 # neither dump contains
 # '*** SERVICE ... DUMP TIMEOUT', and policy_restriction.py exits 1 and
 # prints "restriction <token> is not applied". Exit 2 (empty, unrecognised,
-# timeout, or a missing API 34 marker) is a failed clear. Exit 3 (argparse
+# timeout, unreadable, or a missing API 34 marker) is a failed clear. Exit 3 (argparse
 # usage) is a failed clear and is not exit 2. A bad RESTRICTION or mode, or
 # both mode env vars set at once, exits before the emulator is touched.
 # CLEAR_LEG_STUB=1 sources scripts/lib/clear-leg.sh and runs only that gate.
-# It refuses to run when SERIAL or ANDROID_SERIAL was set by the caller.
+# It refuses to run when SERIAL or ANDROID_SERIAL was set by the caller,
+# including SERIAL= or ANDROID_SERIAL= (set but empty). ${VAR+x} sees that.
 #
 # disallowFactoryReset only sets or clears the user restriction
 # no_factory_reset. This script does not factory-reset, wipe, or pass
@@ -61,16 +63,18 @@
 #   check-in, exit non-zero with
 #   FAIL: step clear: <token> still applied after <flag>=false.
 #   On API 34 and above the after-false device_policy dump must contain an
-#   anchored Local Policies: or Global Policies: line, and dumpsys user
-#   must contain UserInfo{ and a restriction header. A
+#   anchored Local Policies: or Global Policies: line, plus
+#   UserRestrictionPolicyKey or a non-empty indented line under that
+#   header. A header alone is not a clear. dumpsys user must contain
+#   UserInfo{ and a restriction header. A
 #   '*** SERVICE ... DUMP TIMEOUT' line fails the
 #   step and names that marker. policy_restriction.py must exit 1 and print
 #   "restriction <token> is not applied". Exit 2 (empty, unrecognised,
-#   timeout, or a missing marker) is a failed clear. Exit 3 is a usage
+#   timeout, unreadable, or a missing marker) is a failed clear. Exit 3 is a usage
 #   error, not a clear. A read error is not a clear.
 # - CLEAR_LEG_STUB=1 with SERIAL or ANDROID_SERIAL set refuses to run.
-#   Unset those variables for a host-only fixture. The stub does not
-#   talk to adb.
+#   A set-but-empty value counts as set. Unset those variables for a
+#   host-only fixture. The stub does not talk to adb.
 # - Setting both DISALLOW_ADD_USER and DISALLOW_FACTORY_RESET is a fail
 #   before the emulator is used. Only the env var for RESTRICTION may be set.
 # - Post-run state: after a true run the emulator is left with this app as
@@ -113,9 +117,19 @@ DEFAULT_SDK="$(cd "$ROOT/../android-sdk" 2>/dev/null && pwd || true)"
 export ANDROID_HOME JAVA_HOME ANDROID_SDK_ROOT ANDROID_AVD_HOME ANDROID_USER_HOME ANDROID_ADB_SERVER_PORT
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 
-# Saved before the nimo default. CLEAR_LEG_STUB refuses a caller-supplied target.
-_CALLER_SERIAL="${SERIAL-}"
-_CALLER_ANDROID_SERIAL="${ANDROID_SERIAL-}"
+# Saved before the nimo default. ${VAR+x} is x when the caller set the
+# variable, including SERIAL=. ${VAR-} would hide that empty value and
+# the stub would run. Unset stays unset.
+if [ -n "${SERIAL+x}" ]; then
+  _CALLER_SERIAL="$SERIAL"
+else
+  unset _CALLER_SERIAL
+fi
+if [ -n "${ANDROID_SERIAL+x}" ]; then
+  _CALLER_ANDROID_SERIAL="$ANDROID_SERIAL"
+else
+  unset _CALLER_ANDROID_SERIAL
+fi
 SERIAL="${SERIAL:-emulator-5574}"
 AVD="${AVD:-mdm36}"
 CONSOLE_PORT="${CONSOLE_PORT:-5574}"

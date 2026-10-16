@@ -164,6 +164,68 @@ class ClearLegStubTest(unittest.TestCase):
             self.assertNotIn("set-device-owner", proc.stdout)
             self.assertNotIn("set-device-owner", proc.stderr)
 
+    def _errexit_after_clear(self, mode: str) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "p.txt").write_text(_CLEARED_POLICY, encoding="utf-8")
+            (root / "u.txt").write_text(_CLEARED_USER, encoding="utf-8")
+            script = (
+                f"set {mode}\n"
+                f'source "{LIB}"\n'
+                f'ROOT="{ROOT}" TOKEN=no_factory_reset FLAG_KEY=disallowFactoryReset\n'
+                f'accept_cleared_restriction "{root}/p.txt" "{root}/u.txt" "{root}/o.txt" 35\n'
+                'case $- in *e*) echo ERREXIT=on ;; *) echo ERREXIT=off ;; esac\n'
+            )
+            return subprocess.run(
+                ["bash", "-c", script], check=False, capture_output=True, text=True
+            )
+
+    def test_accept_cleared_restriction_keeps_errexit_off(self) -> None:
+        proc = self._errexit_after_clear("+e")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("restriction no_factory_reset is not applied", proc.stdout)
+        self.assertIn("ERREXIT=off", proc.stdout)
+        self.assertNotIn("ERREXIT=on", proc.stdout)
+
+    def test_accept_cleared_restriction_restores_errexit_on(self) -> None:
+        proc = self._errexit_after_clear("-e")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("ERREXIT=on", proc.stdout)
+
+    def test_stub_refuses_when_serial_is_set_empty(self) -> None:
+        # SERIAL= and ANDROID_SERIAL= are set. An empty value is still a
+        # caller target. ${VAR+x} sees it; ${VAR-} would let the stub run.
+        accepted = self._run(_CLEARED_POLICY, _CLEARED_USER)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        for key in ("SERIAL", "ANDROID_SERIAL"):
+            proc = self._run(_CLEARED_POLICY, _CLEARED_USER, {key: ""})
+            self.assertEqual(proc.returncode, 1, proc.stderr)
+            self.assertIn(
+                "FAIL: CLEAR_LEG_STUB refused because adb/SERIAL is configured",
+                proc.stderr,
+            )
+            self.assertNotIn("PASS:", proc.stdout)
+            self.assertNotIn("set-device-owner", proc.stdout)
+            self.assertNotIn("set-device-owner", proc.stderr)
+
+    def test_header_only_device_policy_fails_the_clear_leg(self) -> None:
+        policy = (
+            "Current Device Policy Manager state:\n"
+            "  Local Policies:\n"
+            "    \n"
+            "  Global Policies:\n"
+        )
+        self.assertNotIn("UserRestrictionPolicyKey", policy)
+        proc = self._run(policy, _CLEARED_USER)
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertIn(
+            "FAIL: step clear: after-false device_policy dump lacks "
+            "UserRestrictionPolicyKey or a section body",
+            proc.stderr,
+        )
+        self.assertNotIn("PASS:", proc.stdout)
+        self.assertNotIn("is not applied", proc.stdout)
+
     def test_api33_device_owner_marker_is_not_enough_on_api35(self) -> None:
         policy = "Device Owner:\n  admin=net.themark.grapheneosmdm\n"
         legacy = self._run(policy, _CLEARED_USER, {"API_LEVEL": "33"})
