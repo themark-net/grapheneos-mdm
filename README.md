@@ -1,5 +1,7 @@
 # grapheneos-mdm
 
+> **Status: parked** (Nov 2026). Not in active development; fixes only if something breaks.
+
 Custom **Device Owner** MDM agent for managing a fleet of GrapheneOS devices.
 
 Built with Kotlin. Uses the native AOSP `DevicePolicyManager` API.
